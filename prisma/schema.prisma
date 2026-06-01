@@ -1,0 +1,316 @@
+// Prisma Schema — Omega Trust Logistik WMS
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  phone        String?
+  role         String   // super_admin | warehouse_admin | checker_inbound | picker | driver | customer_viewer
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdPackingLists   PackingList[]      @relation("PLCreatedBy")
+  verifiedPackingLists  PackingList[]      @relation("PLVerifiedBy")
+  checkedReceipts       InboundReceipt[]
+  createdDTs            DeliveryTicket[]   @relation("DTCreatedBy")
+  driverDOs             DeliveryOrder[]    @relation("DODriver")
+  pickerDOs             DeliveryOrder[]    @relation("DOPicker")
+  createdDOs            DeliveryOrder[]    @relation("DOCreatedBy")
+  pickedItems           DOPickingItem[]
+  stockMovements        StockMovement[]
+}
+
+model Customer {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  address      String?
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  products         Product[]
+  packingLists     PackingList[]
+  inboundReceipts  InboundReceipt[]
+  deliveryTickets  DeliveryTicket[]
+  deliveryOrders   DeliveryOrder[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  customerId  String
+  productCode String
+  productName String
+  paintType   String?
+  colorName   String?
+  colorCode   String?
+  sizeLiter   Float?
+  unit        String   @default("pcs")
+  weightKg    Float?
+  barcode     String?
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  customer          Customer          @relation(fields: [customerId], references: [id])
+  packingListItems  PackingListItem[]
+  stockLedgers      StockLedger[]
+  stockMovements    StockMovement[]
+  dtItems           DeliveryTicketItem[]
+  pickingItems      DOPickingItem[]
+
+  @@unique([customerId, productCode])
+}
+
+model WarehouseRack {
+  id             String   @id @default(cuid())
+  rackCode       String   @unique  // A, B, C, D, E, FLOOR
+  rackName       String
+  rackType       String   @default("rack")  // rack | floor
+  totalRows      Int
+  totalLevels    Int
+  totalPositions Int
+  colorHex       String   @default("#22c55e")
+  isActive       Boolean  @default(true)
+
+  positions PalletPosition[]
+}
+
+model PalletPosition {
+  id             String   @id @default(cuid())
+  rackId         String
+  rowNumber      Int
+  levelNumber    Int
+  positionNumber Int
+  positionCode   String   @unique  // e.g. "A-03-02-05"
+  maxCapacity    Int      @default(1)
+  isOccupied     Boolean  @default(false)
+  isActive       Boolean  @default(true)
+
+  rack         WarehouseRack   @relation(fields: [rackId], references: [id])
+  stockLedgers StockLedger[]
+  pickingItems DOPickingItem[]
+
+  @@unique([rackId, rowNumber, levelNumber, positionNumber])
+}
+
+model PackingList {
+  id                 String   @id @default(cuid())
+  customerId         String
+  plNumber           String
+  referenceDtNo      String?
+  inboundDate        DateTime
+  expectedTotalPcs   Int?
+  expectedTotalLiter Float?
+  documentUrl        String?
+  status             String   @default("draft")  // draft | verified | partial | rejected
+  notes              String?
+  createdById        String?
+  verifiedById       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  customer    Customer         @relation(fields: [customerId], references: [id])
+  createdBy   User?            @relation("PLCreatedBy", fields: [createdById], references: [id])
+  verifiedBy  User?            @relation("PLVerifiedBy", fields: [verifiedById], references: [id])
+  items       PackingListItem[]
+  receipts    InboundReceipt[]
+}
+
+model PackingListItem {
+  id            String  @id @default(cuid())
+  packingListId String
+  productId     String?
+  productCode   String
+  productName   String?
+  lotBatchNo    String?
+  handlingUnitId String?
+  expectedQty   Int
+  expectedLiter Float?
+  actualQty     Int     @default(0)
+  actualLiter   Float   @default(0)
+  status        String  @default("pending")  // pending | matched | excess | shortage
+
+  packingList PackingList @relation(fields: [packingListId], references: [id])
+  product     Product?    @relation(fields: [productId], references: [id])
+}
+
+model InboundReceipt {
+  id               String   @id @default(cuid())
+  packingListId    String?
+  receiptNumber    String   @unique  // GRN-2026-0001
+  customerId       String
+  receivedDate     DateTime @default(now())
+  totalPcsReceived Int      @default(0)
+  totalLiterReceived Float  @default(0)
+  status           String   @default("in_progress")  // in_progress | completed | discrepancy
+  checkerId        String?
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  packingList  PackingList?    @relation(fields: [packingListId], references: [id])
+  customer     Customer        @relation(fields: [customerId], references: [id])
+  checker      User?           @relation(fields: [checkerId], references: [id])
+  stockLedgers StockLedger[]
+}
+
+model StockLedger {
+  id               String   @id @default(cuid())
+  productId        String
+  palletPositionId String
+  batchNumber      String?
+  quantity         Int      @default(0)
+  quantityLiter    Float    @default(0)
+  inboundDate      DateTime
+  inboundReceiptId String?
+  isReserved       Boolean  @default(false)
+  reservedQty      Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  product        Product        @relation(fields: [productId], references: [id])
+  palletPosition PalletPosition @relation(fields: [palletPositionId], references: [id])
+  inboundReceipt InboundReceipt? @relation(fields: [inboundReceiptId], references: [id])
+  pickingItems   DOPickingItem[]
+}
+
+model StockMovement {
+  id               String   @id @default(cuid())
+  productId        String
+  palletPositionId String?
+  movementType     String   // inbound | outbound | transfer | adjustment
+  quantity         Int
+  quantityBefore   Int
+  quantityAfter    Int
+  batchNumber      String?
+  referenceType    String?  // inbound_receipt | delivery_order
+  referenceId      String?
+  notes            String?
+  performedById    String?
+  createdAt        DateTime @default(now())
+
+  product       Product @relation(fields: [productId], references: [id])
+  performedBy   User?   @relation(fields: [performedById], references: [id])
+}
+
+model DeliveryTicket {
+  id               String   @id @default(cuid())
+  customerId       String
+  dtNumber         String
+  delnoteNumber    String?
+  orderNumber      String?
+  customerPoNo     String?
+  deliverToName    String?
+  deliverToAddress String?
+  invoiceToName    String?
+  shipFromWhse     String?
+  haulierCompany   String?
+  vehicleNo        String?
+  orderDate        DateTime?
+  deliveryDate     DateTime?
+  totalGrossKg     Float?
+  totalNetKg       Float?
+  totalPcs         Int?
+  totalLiter       Float?
+  totalPallets     Int?
+  documentUrl      String?
+  ocrRawData       String?  // JSON string
+  ocrStatus        String   @default("pending")  // pending | processing | completed | failed
+  status           String   @default("draft")    // draft | processing | ready | picking | shipped | partially_delivered | delivered | cancelled
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  customer        Customer             @relation(fields: [customerId], references: [id])
+  createdBy       User?                @relation("DTCreatedBy", fields: [createdById], references: [id])
+  items           DeliveryTicketItem[]
+  deliveryOrders  DeliveryOrder[]
+
+  @@unique([customerId, dtNumber])
+}
+
+model DeliveryTicketItem {
+  id               String  @id @default(cuid())
+  deliveryTicketId String
+  lineNo           Int?
+  productId        String?
+  productCode      String
+  productName      String?
+  lotBatchNo       String?
+  handlingUnitId   String?
+  delQtyPcs        Int
+  delQtyLiter      Float?
+  delQtyKg         Float?
+  deliveredQty     Int     @default(0)
+  status           String  @default("pending")  // pending | picking | picked | shipped | partially_delivered | delivered
+
+  deliveryTicket DeliveryTicket @relation(fields: [deliveryTicketId], references: [id])
+  product        Product?       @relation(fields: [productId], references: [id])
+  pickingItems   DOPickingItem[]
+}
+
+model DeliveryOrder {
+  id               String   @id @default(cuid())
+  doNumber         String   @unique  // OTL-DO-2026-0001
+  deliveryTicketId String
+  customerId       String
+  destination      String
+  deliveryDate     DateTime?
+  driverId         String?
+  vehicleNo        String?
+  status           String   @default("draft")  // draft | picking | ready_to_ship | on_delivery | partially_delivered | delivered | cancelled
+  pickerId         String?
+  pickingStartedAt DateTime?
+  pickingCompletedAt DateTime?
+  shippedAt        DateTime?
+  deliveredAt      DateTime?
+  proofOfDeliveryUrl String?
+  podPhotoUrl      String?
+  deliveryNotes    String?
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  deliveryTicket DeliveryTicket  @relation(fields: [deliveryTicketId], references: [id])
+  customer       Customer        @relation(fields: [customerId], references: [id])
+  driver         User?           @relation("DODriver", fields: [driverId], references: [id])
+  picker         User?           @relation("DOPicker", fields: [pickerId], references: [id])
+  createdBy      User?           @relation("DOCreatedBy", fields: [createdById], references: [id])
+  pickingItems   DOPickingItem[]
+}
+
+model DOPickingItem {
+  id               String   @id @default(cuid())
+  deliveryOrderId  String
+  dtItemId         String
+  productId        String
+  stockLedgerId    String
+  palletPositionId String
+  positionCode     String
+  batchNumber      String?
+  requiredQty      Int
+  pickedQty        Int      @default(0)
+  scanConfirmed    Boolean  @default(false)
+  pickedById       String?
+  pickedAt         DateTime?
+  status           String   @default("pending")  // pending | picking | picked | shipped
+
+  deliveryOrder  DeliveryOrder      @relation(fields: [deliveryOrderId], references: [id])
+  dtItem         DeliveryTicketItem @relation(fields: [dtItemId], references: [id])
+  product        Product            @relation(fields: [productId], references: [id])
+  stockLedger    StockLedger        @relation(fields: [stockLedgerId], references: [id])
+  palletPosition PalletPosition     @relation(fields: [palletPositionId], references: [id])
+  pickedBy       User?              @relation(fields: [pickedById], references: [id])
+}
