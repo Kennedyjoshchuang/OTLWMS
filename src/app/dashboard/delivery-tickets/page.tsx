@@ -9,6 +9,7 @@ export default async function DeliveryTicketsPage() {
       customer: true,
       items: true,
       createdBy: true,
+      invoice: true,
     },
     orderBy: { createdAt: "desc" },
   });

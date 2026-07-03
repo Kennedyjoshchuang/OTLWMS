@@ -46,6 +46,7 @@ model Customer {
   inboundReceipts  InboundReceipt[]
   deliveryTickets  DeliveryTicket[]
   deliveryOrders   DeliveryOrder[]
+  invoices         Invoice[]
 }
 
 model Product {
@@ -84,6 +85,7 @@ model WarehouseRack {
   totalPositions Int
   colorHex       String   @default("#22c55e")
   isActive       Boolean  @default(true)
+  levelAliases   String?  // JSON: {"1":"Ground","2":"Tier 1","3":"Tier 2","4":"Top"}
 
   positions PalletPosition[]
 }
@@ -237,6 +239,7 @@ model DeliveryTicket {
   createdBy       User?                @relation("DTCreatedBy", fields: [createdById], references: [id])
   items           DeliveryTicketItem[]
   deliveryOrders  DeliveryOrder[]
+  invoice         Invoice?
 
   @@unique([customerId, dtNumber])
 }
@@ -313,4 +316,44 @@ model DOPickingItem {
   stockLedger    StockLedger        @relation(fields: [stockLedgerId], references: [id])
   palletPosition PalletPosition     @relation(fields: [palletPositionId], references: [id])
   pickedBy       User?              @relation(fields: [pickedById], references: [id])
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  deliveryTicketId String        @unique
+  invoiceNumber    String        @unique
+  customerId       String
+  totalAmount      Float
+  status           String        @default("draft") // draft | sent | paid | cancelled
+  issuedAt         DateTime      @default(now())
+  dueDate          DateTime
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  deliveryTicket   DeliveryTicket @relation(fields: [deliveryTicketId], references: [id], onDelete: Cascade)
+  customer         Customer       @relation(fields: [customerId], references: [id])
+  items            InvoiceItem[]
+}
+
+model InvoiceItem {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  activityName String   // e.g., "Picking Fee", "Handling Out Fee", "Storage Fee", "Delivery Fee"
+  description  String?
+  quantity     Float
+  unitPrice    Float
+  totalPrice   Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Incident {
+  id          String   @id @default(cuid())
+  type        String   // fire | spillage | accident | other
+  description String
+  location    String?
+  reportedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 }

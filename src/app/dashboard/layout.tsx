@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import { 
   LayoutDashboard, Package, Inbox, Truck, FileText, 
-  Map, Settings, LogOut, Loader2, Menu, Users
+  Map, Settings, LogOut, Loader2, Menu, Users, Receipt, Box
 } from "lucide-react";
 import { useState } from "react";
 
@@ -37,8 +37,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["super_admin", "warehouse_admin", "customer_viewer"] },
     { name: "Inbound (GRN)", href: "/dashboard/inbound", icon: Inbox, roles: ["super_admin", "warehouse_admin", "checker_inbound"] },
+    { name: "Products", href: "/dashboard/products", icon: Box, roles: ["super_admin", "warehouse_admin"] },
     { name: "Warehouse Map", href: "/dashboard/warehouse", icon: Map, roles: ["super_admin", "warehouse_admin", "checker_inbound", "picker"] },
     { name: "Delivery Tickets", href: "/dashboard/delivery-tickets", icon: FileText, roles: ["super_admin", "warehouse_admin"] },
+    { name: "Billing & Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["super_admin", "warehouse_admin", "customer_viewer"] },
     { name: "Delivery Orders", href: "/dashboard/delivery-orders", icon: Package, roles: ["super_admin", "warehouse_admin", "picker"] },
     { name: "Deliveries", href: "/dashboard/deliveries", icon: Truck, roles: ["super_admin", "warehouse_admin", "driver"] },
     { name: "Employees", href: "/dashboard/employees", icon: Users, roles: ["super_admin", "warehouse_admin"] },

@@ -1,14 +1,44 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
-import { Search, Eye, ArrowRight, Loader2, FileUp, FileText, CheckCircle2, AlertCircle } from "lucide-react";
+import { Search, Eye, ArrowRight, Loader2, FileUp, FileText, CheckCircle2, AlertCircle, Receipt } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export default function DeliveryTicketsClient({ initialTickets }: { initialTickets: any[] }) {
+  const [tickets, setTickets] = useState(initialTickets);
   const [search, setSearch] = useState("");
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [ocrStep, setOcrStep] = useState<"upload" | "processing" | "review" | "success">("upload");
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+
+  const handleGenerateInvoice = async (ticketId: string) => {
+    setGeneratingId(ticketId);
+    try {
+      const res = await fetch("/api/invoices/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deliveryTicketId: ticketId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Failed to generate invoice");
+        return;
+      }
+      setTickets(prev => prev.map(t => {
+        if (t.id === ticketId) {
+          return { ...t, invoice: data.invoice };
+        }
+        return t;
+      }));
+    } catch (err) {
+      console.error(err);
+      alert("An error occurred while generating the invoice");
+    } finally {
+      setGeneratingId(null);
+    }
+  };
 
   const handleStartUpload = () => {
     setUploadModalOpen(true);
@@ -29,7 +59,7 @@ export default function DeliveryTicketsClient({ initialTickets }: { initialTicke
     }, 2000);
   };
 
-  const filtered = initialTickets.filter(t => 
+  const filtered = tickets.filter(t => 
     t.dtNumber.toLowerCase().includes(search.toLowerCase()) || 
     t.customer.name.toLowerCase().includes(search.toLowerCase())
   );
@@ -66,13 +96,14 @@ export default function DeliveryTicketsClient({ initialTickets }: { initialTicke
               <th className="px-6 py-4 font-semibold">Items</th>
               <th className="px-6 py-4 font-semibold">OCR Status</th>
               <th className="px-6 py-4 font-semibold">DO Status</th>
+              <th className="px-6 py-4 font-semibold">Invoice</th>
               <th className="px-6 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   No delivery tickets found.
                 </td>
@@ -92,6 +123,32 @@ export default function DeliveryTicketsClient({ initialTickets }: { initialTicke
                   <span className={`px-2.5 py-1 rounded-full text-xs font-semibold text-white ${STATUS_COLOR[ticket.status] || 'bg-slate-500'}`}>
                     {STATUS_LABEL[ticket.status] || ticket.status}
                   </span>
+                </td>
+                <td className="px-6 py-4">
+                  {ticket.invoice ? (
+                    <Link 
+                      href={`/dashboard/invoices/${ticket.invoice.id}`}
+                      className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 hover:bg-emerald-200 transition-colors inline-flex items-center gap-1"
+                    >
+                      <Receipt className="w-3.5 h-3.5 animate-pulse" />
+                      {ticket.invoice.invoiceNumber}
+                    </Link>
+                  ) : ticket.status === "delivered" ? (
+                    <button
+                      onClick={() => handleGenerateInvoice(ticket.id)}
+                      disabled={generatingId === ticket.id}
+                      className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 transition-colors inline-flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {generatingId === ticket.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Receipt className="w-3.5 h-3.5" />
+                      )}
+                      Generate Invoice
+                    </button>
+                  ) : (
+                    <span className="text-slate-400 text-xs">-</span>
+                  )}
                 </td>
                 <td className="px-6 py-4 text-right">
                   <button className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors">

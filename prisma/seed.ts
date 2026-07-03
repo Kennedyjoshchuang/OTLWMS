@@ -52,14 +52,15 @@ async function main() {
   })
 
   // ─── WAREHOUSE RACKS ─────────────────────────────────────────────
-  // Layout: A=72PP(4L,18pos), B=128PP(4L,32pos), C=128PP(4L,32pos)
-  //         D=120PP(4L,30pos), E=120PP(4L,30pos), FLOOR=32PP(1L,32pos)
+  // Layout: A=72PP(4L,18pos), B=64PP(4L,16pos), C=64PP(4L,16pos)
+  //         D=60PP(4L,15pos), E=60PP(4L,15pos), FLOOR=32PP(1L,32pos)
+  // Total: 352 PP
   const racks = [
     { id: 'rack-A',     rackCode: 'A',     rackName: 'Rack A', rackType: 'rack',  totalRows: 18, totalLevels: 4,  totalPositions: 72,  colorHex: '#22c55e' },
-    { id: 'rack-B',     rackCode: 'B',     rackName: 'Rack B', rackType: 'rack',  totalRows: 32, totalLevels: 4,  totalPositions: 128, colorHex: '#22c55e' },
-    { id: 'rack-C',     rackCode: 'C',     rackName: 'Rack C', rackType: 'rack',  totalRows: 32, totalLevels: 4,  totalPositions: 128, colorHex: '#22c55e' },
-    { id: 'rack-D',     rackCode: 'D',     rackName: 'Rack D', rackType: 'rack',  totalRows: 30, totalLevels: 4,  totalPositions: 120, colorHex: '#22c55e' },
-    { id: 'rack-E',     rackCode: 'E',     rackName: 'Rack E', rackType: 'rack',  totalRows: 30, totalLevels: 4,  totalPositions: 120, colorHex: '#22c55e' },
+    { id: 'rack-B',     rackCode: 'B',     rackName: 'Rack B', rackType: 'rack',  totalRows: 16, totalLevels: 4,  totalPositions: 64,  colorHex: '#22c55e' },
+    { id: 'rack-C',     rackCode: 'C',     rackName: 'Rack C', rackType: 'rack',  totalRows: 16, totalLevels: 4,  totalPositions: 64,  colorHex: '#22c55e' },
+    { id: 'rack-D',     rackCode: 'D',     rackName: 'Rack D', rackType: 'rack',  totalRows: 15, totalLevels: 4,  totalPositions: 60,  colorHex: '#22c55e' },
+    { id: 'rack-E',     rackCode: 'E',     rackName: 'Rack E', rackType: 'rack',  totalRows: 15, totalLevels: 4,  totalPositions: 60,  colorHex: '#22c55e' },
     { id: 'rack-FLOOR', rackCode: 'FLOOR', rackName: 'Floor Storage (Red)', rackType: 'floor', totalRows: 32, totalLevels: 1, totalPositions: 32, colorHex: '#ef4444' },
   ]
 
@@ -71,10 +72,10 @@ async function main() {
   console.log('📦 Generating 352 pallet positions...')
   const rackConfigs = [
     { code: 'A', rows: 18, levels: 4 },
-    { code: 'B', rows: 32, levels: 4 },
-    { code: 'C', rows: 32, levels: 4 },
-    { code: 'D', rows: 30, levels: 4 },
-    { code: 'E', rows: 30, levels: 4 },
+    { code: 'B', rows: 16, levels: 4 },
+    { code: 'C', rows: 16, levels: 4 },
+    { code: 'D', rows: 15, levels: 4 },
+    { code: 'E', rows: 15, levels: 4 },
     { code: 'FLOOR', rows: 32, levels: 1 },
   ]
 

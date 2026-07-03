@@ -1,81 +1,537 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition, useMemo } from "react";
+import Select from "react-select";
+import { useRouter } from "next/navigation";
 import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
-import { Search, Inbox, ArrowRight, Plus } from "lucide-react";
+import {
+  Search, Inbox, ArrowRight, Plus, X, Trash2,
+  PackagePlus, Loader2, CheckCircle2, AlertCircle,
+} from "lucide-react";
 
-export default function InboundClient({ initialReceipts }: { initialReceipts: any[] }) {
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface Product {
+  id: string;
+  productCode: string;
+  productName: string;
+  sizeLiter: number | null;
+  weightKg: number | null;
+}
+interface Customer { id: string; name: string }
+interface Checker  { id: string; fullName: string }
+
+interface InboundItem {
+  productId: string;
+  productCode: string;
+  productName: string;
+  sizeLiter: number;
+  batchNumber: string;
+  qty: number;
+  rackRowId: string;
+}
+
+interface Props {
+  initialReceipts: any[];
+  customers: Customer[];
+  checkers: Checker[];
+  products: Product[];
+  racks?: any[];
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+export default function InboundClient({
+  initialReceipts,
+  customers,
+  checkers,
+  products,
+  racks = [],
+}: Props) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  // Table search
   const [search, setSearch] = useState("");
 
-  const filtered = initialReceipts.filter(r => 
-    r.receiptNumber.toLowerCase().includes(search.toLowerCase()) || 
-    r.customer.name.toLowerCase().includes(search.toLowerCase())
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Form state
+  const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
+  const [checkerId, setCheckerId]   = useState("");
+  const [receivedDate, setReceivedDate] = useState(
+    new Date().toISOString().slice(0, 10)
+  );
+  const [notes, setNotes] = useState("");
+  const [items, setItems] = useState<InboundItem[]>([
+    { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "" },
+  ]);
+
+  // Compute Product options for Select
+  const productOptions = useMemo(() => {
+    return products.map(p => ({
+      value: p.id,
+      label: `${p.productCode} — ${p.productName}`
+    }));
+  }, [products]);
+
+  // Compute Rack & Row options with capacity
+  const rackRowOptions = useMemo(() => {
+    const options: { id: string; label: string; percent: number }[] = [];
+    racks.forEach((rack) => {
+      const rowMap = new Map<number, any[]>();
+      rack.positions.forEach((p: any) => {
+        if (!rowMap.has(p.rowNumber)) rowMap.set(p.rowNumber, []);
+        rowMap.get(p.rowNumber)!.push(p);
+      });
+      Array.from(rowMap.entries())
+        .sort(([a], [b]) => a - b)
+        .forEach(([rowNumber, positions]) => {
+          const total = positions.length;
+          const occupied = positions.filter((p) => p.isOccupied).length;
+          const percent = total > 0 ? Math.round((occupied / total) * 100) : 0;
+          options.push({
+            id: `${rack.id}_${rack.rackCode}_${rowNumber}`,
+            label: `${rack.rackCode === "FLOOR" ? "Floor" : `Rack ${rack.rackCode}`} - Row ${String(rowNumber).padStart(2, "0")} (${percent}% loaded)`,
+            percent,
+          });
+        });
+    });
+    return options;
+  }, [racks]);
+
+  // Compute Location options for Select
+  const locationOptions = useMemo(() => {
+    return rackRowOptions.map(opt => ({
+      value: opt.id,
+      label: opt.percent === 100 ? `${opt.label} (FULL)` : opt.label,
+      isDisabled: opt.percent === 100
+    }));
+  }, [rackRowOptions]);
+
+  // ── Filter table
+  const filtered = initialReceipts.filter(
+    (r) =>
+      r.receiptNumber.toLowerCase().includes(search.toLowerCase()) ||
+      r.customer?.name?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // ── Item helpers
+  const handleProductChange = (idx: number, productId: string) => {
+    const p = products.find((x) => x.id === productId);
+    setItems((prev) =>
+      prev.map((it, i) =>
+        i === idx
+          ? {
+              ...it,
+              productId: productId,
+              productCode: p?.productCode ?? "",
+              productName: p?.productName ?? "",
+              sizeLiter: p?.sizeLiter ?? 5,
+            }
+          : it
+      )
+    );
+  };
+
+  const handleItemChange = (
+    idx: number,
+    field: keyof InboundItem,
+    value: string | number
+  ) => {
+    setItems((prev) =>
+      prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it))
+    );
+  };
+
+  const addItem = () =>
+    setItems((prev) => [
+      ...prev,
+      { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "" },
+    ]);
+
+  const removeItem = (idx: number) =>
+    setItems((prev) => prev.filter((_, i) => i !== idx));
+
+  // ── Reset form
+  const resetForm = () => {
+    setCustomerId(customers[0]?.id ?? "");
+    setCheckerId("");
+    setReceivedDate(new Date().toISOString().slice(0, 10));
+    setNotes("");
+    setItems([
+      { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "" },
+    ]);
+    setSaveError("");
+    setSaveSuccess(false);
+  };
+
+  // ── Submit
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customerId) { setSaveError("Please select a customer."); return; }
+    if (items.some((it) => !it.productId || !it.rackRowId)) {
+      setSaveError("Please select a product and a warehouse location for each line item.");
+      return;
+    }
+    setSaveError("");
+    setSaving(true);
+
+    try {
+      const res = await fetch("/api/inbound", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId, checkerId, receivedDate, notes, items }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save.");
+
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setShowModal(false);
+        resetForm();
+        startTransition(() => router.refresh());
+      }, 1200);
+    } catch (err: any) {
+      setSaveError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const totalPcs = items.reduce((s, it) => s + Number(it.qty || 0), 0);
+  const totalLiter = items.reduce(
+    (s, it) => s + Number(it.qty || 0) * Number(it.sizeLiter || 0),
+    0
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div className="relative w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Search GRN or Customer..." 
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-sm"
-          />
+    <>
+      {/* ── Table Section ─────────────────────────────────────────────── */}
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div className="relative w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search GRN or Customer..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-sm"
+            />
+          </div>
+
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="flex items-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20"
+          >
+            <Plus className="w-5 h-5" />
+            New Inbound
+          </button>
         </div>
-        <button 
-          className="flex items-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-2 rounded-xl font-medium transition-all"
-        >
-          <Plus className="w-5 h-5" />
-          New Inbound
-        </button>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-600">
+            <thead className="text-xs uppercase bg-slate-50 text-slate-500 border-y">
+              <tr>
+                <th className="px-6 py-4 font-semibold">GRN Number</th>
+                <th className="px-6 py-4 font-semibold">Customer</th>
+                <th className="px-6 py-4 font-semibold">Received Date</th>
+                <th className="px-6 py-4 font-semibold">Pcs Received</th>
+                <th className="px-6 py-4 font-semibold">Checker</th>
+                <th className="px-6 py-4 font-semibold">Status</th>
+                <th className="px-6 py-4 font-semibold text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                    <Inbox className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                    No inbound receipts found.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((receipt) => (
+                  <tr key={receipt.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 font-medium text-slate-800">{receipt.receiptNumber}</td>
+                    <td className="px-6 py-4">{receipt.customer?.name}</td>
+                    <td className="px-6 py-4">{formatDateTime(receipt.receivedDate)}</td>
+                    <td className="px-6 py-4">{receipt.totalPcsReceived} pcs</td>
+                    <td className="px-6 py-4">{receipt.checker?.fullName || "-"}</td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold text-white ${
+                          STATUS_COLOR[receipt.status] || "bg-slate-500"
+                        }`}
+                      >
+                        {STATUS_LABEL[receipt.status] || receipt.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        title="View Detail"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm text-slate-600">
-          <thead className="text-xs uppercase bg-slate-50 text-slate-500 border-y">
-            <tr>
-              <th className="px-6 py-4 font-semibold">GRN Number</th>
-              <th className="px-6 py-4 font-semibold">Customer</th>
-              <th className="px-6 py-4 font-semibold">Received Date</th>
-              <th className="px-6 py-4 font-semibold">Pcs Received</th>
-              <th className="px-6 py-4 font-semibold">Checker</th>
-              <th className="px-6 py-4 font-semibold">Status</th>
-              <th className="px-6 py-4 font-semibold text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
-                  <Inbox className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                  No inbound receipts found.
-                </td>
-              </tr>
-            ) : filtered.map((receipt) => (
-              <tr key={receipt.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-6 py-4 font-medium text-slate-800">{receipt.receiptNumber}</td>
-                <td className="px-6 py-4">{receipt.customer.name}</td>
-                <td className="px-6 py-4">{formatDateTime(receipt.receivedDate)}</td>
-                <td className="px-6 py-4">{receipt.totalPcsReceived} pcs</td>
-                <td className="px-6 py-4">{receipt.checker?.fullName || '-'}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold text-white ${STATUS_COLOR[receipt.status] || 'bg-slate-500'}`}>
-                    {STATUS_LABEL[receipt.status] || receipt.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <button className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="Verify">
-                    <ArrowRight className="w-4 h-4" />
+      {/* ── Modal ─────────────────────────────────────────────────────── */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => { if (!saving) { setShowModal(false); resetForm(); } }}
+          />
+
+          {/* Panel */}
+          <div className="relative z-10 w-full max-w-2xl mx-4 bg-white rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b px-6 py-4 rounded-t-3xl flex items-center justify-between z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <PackagePlus className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">New Inbound (GRN)</h2>
+                  <p className="text-xs text-slate-500">Record incoming goods from customer</p>
+                </div>
+              </div>
+              <button
+                onClick={() => { if (!saving) { setShowModal(false); resetForm(); } }}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Success State */}
+            {saveSuccess ? (
+              <div className="p-12 flex flex-col items-center gap-4 text-center">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">GRN Created!</h3>
+                <p className="text-slate-500 text-sm">Inbound receipt has been saved successfully.</p>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                {/* Error banner */}
+                {saveError && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {saveError}
+                  </div>
+                )}
+
+                {/* Row 1 — Customer & Date */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                      Customer *
+                    </label>
+                    <select
+                      value={customerId}
+                      onChange={(e) => setCustomerId(e.target.value)}
+                      required
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                    >
+                      <option value="">— Select customer —</option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                      Received Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={receivedDate}
+                      onChange={(e) => setReceivedDate(e.target.value)}
+                      required
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Row 2 — Checker */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Checker (optional)
+                  </label>
+                  <select
+                    value={checkerId}
+                    onChange={(e) => setCheckerId(e.target.value)}
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                  >
+                    <option value="">— Unassigned —</option>
+                    {checkers.map((c) => (
+                      <option key={c.id} value={c.id}>{c.fullName}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Items */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                      Items Received *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={addItem}
+                      className="text-xs text-primary hover:text-primary-focus font-semibold flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Line
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    {items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="grid grid-cols-12 gap-2 items-start p-3 bg-slate-50 rounded-xl border border-slate-100"
+                      >
+                        {/* Product select — col 3 */}
+                        <div className="col-span-3">
+                          <label className="text-[10px] font-medium text-slate-400 uppercase">Product</label>
+                          <Select
+                            options={productOptions}
+                            value={productOptions.find(o => o.value === item.productId) || null}
+                            onChange={(val) => handleProductChange(idx, val?.value || "")}
+                            placeholder="— Select —"
+                            className="text-xs mt-0.5"
+                            styles={{
+                              control: (base) => ({ ...base, borderRadius: "0.5rem", minHeight: "34px", height: "34px", borderColor: "#e2e8f0" })
+                            }}
+                          />
+                        </div>
+
+                        {/* Location (Rack Row) select — col 3 */}
+                        <div className="col-span-3">
+                          <label className="text-[10px] font-medium text-slate-400 uppercase">Location (Box)</label>
+                          <Select
+                            options={locationOptions}
+                            value={locationOptions.find(o => o.value === item.rackRowId) || null}
+                            onChange={(val) => handleItemChange(idx, "rackRowId", val?.value || "")}
+                            placeholder="— Select Location —"
+                            className="text-xs mt-0.5"
+                            styles={{
+                              control: (base) => ({ ...base, borderRadius: "0.5rem", minHeight: "34px", height: "34px", borderColor: "#e2e8f0" })
+                            }}
+                          />
+                        </div>
+
+                        {/* Batch — col 3 */}
+                        <div className="col-span-3">
+                          <label className="text-[10px] font-medium text-slate-400 uppercase">Batch No.</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. 4112282-1"
+                            value={item.batchNumber}
+                            onChange={(e) => handleItemChange(idx, "batchNumber", e.target.value)}
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs bg-white focus:ring-2 focus:ring-primary outline-none mt-0.5"
+                          />
+                        </div>
+
+                        {/* Qty — col 2 */}
+                        <div className="col-span-2">
+                          <label className="text-[10px] font-medium text-slate-400 uppercase">Qty (pcs)</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={item.qty}
+                            onChange={(e) => handleItemChange(idx, "qty", Number(e.target.value))}
+                            required
+                            className="w-full border rounded-lg px-2 py-1.5 text-xs bg-white focus:ring-2 focus:ring-primary outline-none mt-0.5"
+                          />
+                        </div>
+
+                        {/* Remove */}
+                        <div className="col-span-1 flex items-end pb-1 justify-center">
+                          {items.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeItem(idx)}
+                              className="p-1 text-slate-300 hover:text-red-500 transition-colors"
+                              title="Remove line"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Totals */}
+                  {totalPcs > 0 && (
+                    <div className="flex gap-4 mt-3 px-3">
+                      <span className="text-xs text-slate-500">
+                        Total: <strong className="text-slate-800">{totalPcs} pcs</strong>
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        ≈ <strong className="text-slate-800">{totalLiter.toFixed(1)} L</strong>
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Notes (optional)
+                  </label>
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
+                    placeholder="Any notes about this inbound receipt..."
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                  />
+                </div>
+
+                {/* Footer */}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setShowModal(false); resetForm(); }}
+                    disabled={saving}
+                    className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
                   </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-1 py-2.5 bg-primary hover:bg-primary-focus text-white rounded-xl font-semibold shadow-sm shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                  >
+                    {saving ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+                    ) : (
+                      <><CheckCircle2 className="w-4 h-4" /> Save GRN</>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

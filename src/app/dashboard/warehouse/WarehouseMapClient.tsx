@@ -1,180 +1,978 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Search, Layers, ArchiveRestore } from "lucide-react";
+import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo } from "lucide-react";
 
-export default function WarehouseMapClient({ initialRacks }: { initialRacks: any[] }) {
-  const [selectedRack, setSelectedRack] = useState<any | null>(null);
-  const [selectedLevel, setSelectedLevel] = useState<number>(1);
+interface WarehouseMapClientProps {
+  initialRacks: any[];
+}
+
+export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientProps) {
+  const [racks, setRacks] = useState<any[]>(initialRacks);
+
+  const [selectedCell, setSelectedCell] = useState<{
+    rackCode: string;
+    rowNumber: number;
+    positions: any[];
+  } | null>(null);
+
+  const [hoveredCell, setHoveredCell] = useState<{
+    rackCode: string;
+    rowNumber: number;
+    positions: any[];
+    x: number;
+    y: number;
+  } | null>(null);
+
   const [search, setSearch] = useState("");
 
-  const handleRackClick = (rack: any) => {
-    setSelectedRack(rack);
-    setSelectedLevel(1);
+  // Edit Mode state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editRackName, setEditRackName] = useState("");
+  const [editLevelAliases, setEditLevelAliases] = useState<Record<string, string>>({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  // 1. Calculate Warehouse Statistics
+  const stats = useMemo(() => {
+    let total = 0;
+    let occupied = 0;
+    racks.forEach(rack => {
+      total += rack.totalPositions;
+      occupied += rack.positions.filter((p: any) => p.isOccupied).length;
+    });
+    return {
+      total,
+      occupied,
+      available: total - occupied,
+      rate: total > 0 ? Math.round((occupied / total) * 100) : 0
+    };
+  }, [racks]);
+
+  // Helper to get positions for a specific rack and row
+  const getCellData = (rackCode: string, rowNumber: number) => {
+    const rack = racks.find(r => r.rackCode === rackCode);
+    if (!rack) return { rack: null, positions: [], occupiedCount: 0, totalCount: 0, percent: 0 };
+    const positions = rack.positions.filter((p: any) => p.rowNumber === rowNumber);
+    const occupiedCount = positions.filter((p: any) => p.isOccupied).length;
+    const totalCount = positions.length || 1;
+    const percent = Math.round((occupiedCount / totalCount) * 100);
+    return { rack, positions, occupiedCount, totalCount, percent };
   };
 
-  const getRackStatus = (rack: any) => {
-    const occupied = rack.positions.filter((p: any) => p.isOccupied).length;
-    const capacity = rack.totalPositions;
-    const percent = Math.round((occupied / capacity) * 100);
-    return { occupied, capacity, percent };
+  const getLevelName = (rack: any, levelNumber: number) => {
+    if (!rack) return `LEVEL ${levelNumber}`;
+    if (!rack.levelAliases) return `LEVEL ${levelNumber}`;
+    try {
+      const aliases = typeof rack.levelAliases === "string" ? JSON.parse(rack.levelAliases) : rack.levelAliases;
+      return aliases[String(levelNumber)] || `LEVEL ${levelNumber}`;
+    } catch (e) {
+      return `LEVEL ${levelNumber}`;
+    }
   };
 
-  const renderRackBox = (rackCode: string, className: string, label?: string) => {
-    const rack = initialRacks.find(r => r.rackCode === rackCode);
-    if (!rack) return null;
-    const status = getRackStatus(rack);
+  const startEditing = () => {
+    if (!selectedCell) return;
+    const { rack } = getCellData(selectedCell.rackCode, selectedCell.rowNumber);
+    if (!rack) return;
+    setEditRackName(rack.rackName);
+    let aliases: Record<string, string> = {};
+    if (rack.levelAliases) {
+      try {
+        aliases = typeof rack.levelAliases === "string" ? JSON.parse(rack.levelAliases) : rack.levelAliases;
+      } catch (e) {
+        aliases = {};
+      }
+    }
+    const initialAliases: Record<string, string> = {};
+    for (let i = 1; i <= rack.totalLevels; i++) {
+      initialAliases[String(i)] = aliases[String(i)] || "";
+    }
+    setEditLevelAliases(initialAliases);
+    setEditError("");
+    setIsEditing(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedCell) return;
+    const { rack } = getCellData(selectedCell.rackCode, selectedCell.rowNumber);
+    if (!rack) return;
+    setIsSavingEdit(true);
+    setEditError("");
+    try {
+      const res = await fetch(`/api/warehouse/racks/${rack.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          rackName: editRackName,
+          levelAliases: editLevelAliases,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update rack.");
+
+      setRacks((prev) =>
+        prev.map((r) =>
+          r.id === rack.id
+            ? { ...r, rackName: data.rackName, levelAliases: data.levelAliases }
+            : r
+        )
+      );
+      
+      setIsEditing(false);
+    } catch (err: any) {
+      setEditError(err.message || "Failed to save changes.");
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // 2. Define Floor Cell Coordinates (viewBox y: 0 to 6)
+  // Total Width = 14.5m, Total Height = 27m
+  const FLOOR_CELLS = useMemo(() => {
+    const cells = [];
+    const innerLeft = 2.65; // centered horizontally
+
+    // 1 to 10: Outer top row (horizontal)
+    // 10 cells * 1.2m = 12.0m width. Centered: (14.5 - 12.0) / 2 = 1.25m
+    for (let r = 1; r <= 10; r++) {
+      cells.push({
+        rowNumber: r,
+        x: 1.25 + (r - 1) * 1.2,
+        y: 0.0,
+        w: 1.2,
+        h: 1.0,
+        type: "floor_outer_top"
+      });
+    }
+
+    // 11 to 13: Outer left column (vertical)
+    // 3 cells * 1.2m height = 3.6m. Starts at y = 1.2m, x = 0.0
+    for (let r = 11; r <= 13; r++) {
+      cells.push({
+        rowNumber: r,
+        x: 0.0,
+        y: 1.2 + (r - 11) * 1.2,
+        w: 1.0,
+        h: 1.2,
+        type: "floor_outer_left"
+      });
+    }
+
+    // 14 to 16: Outer right column (vertical)
+    // 3 cells * 1.2m height = 3.6m. Starts at y = 1.2m, x = 13.5m
+    for (let r = 14; r <= 16; r++) {
+      cells.push({
+        rowNumber: r,
+        x: 13.5,
+        y: 1.2 + (r - 14) * 1.2,
+        w: 1.0,
+        h: 1.2,
+        type: "floor_outer_right"
+      });
+    }
+
+    // 17 to 24: Inner top row (8 cells)
+    // Cell 1 (left vertical: 1.0m w, 1.2m h) + 6 middle horizontal (1.2m w, 1.0m h) + Cell 8 (right vertical: 1.0m w, 1.2m h)
+    // Total width = 1.0 + 7.2 + 1.0 = 9.2m. Centered: (14.5 - 9.2) / 2 = 2.65m
+    cells.push({ rowNumber: 17, x: innerLeft, y: 2.0, w: 1.0, h: 1.2, type: "floor_inner_top_left" });
+    for (let r = 18; r <= 23; r++) {
+      cells.push({
+        rowNumber: r,
+        x: innerLeft + 1.0 + (r - 18) * 1.2,
+        y: 2.0,
+        w: 1.2,
+        h: 1.0,
+        type: "floor_inner_top_mid"
+      });
+    }
+    cells.push({ rowNumber: 24, x: innerLeft + 8.2, y: 2.0, w: 1.0, h: 1.2, type: "floor_inner_top_right" });
+
+    // 25 to 32: Inner bottom row (8 cells)
+    cells.push({ rowNumber: 25, x: innerLeft, y: 3.6, w: 1.0, h: 1.2, type: "floor_inner_bottom_left" });
+    for (let r = 26; r <= 31; r++) {
+      cells.push({
+        rowNumber: r,
+        x: innerLeft + 1.0 + (r - 26) * 1.2,
+        y: 3.6,
+        w: 1.2,
+        h: 1.0,
+        type: "floor_inner_bottom_mid"
+      });
+    }
+    cells.push({ rowNumber: 32, x: innerLeft + 8.2, y: 3.6, w: 1.0, h: 1.2, type: "floor_inner_bottom_right" });
+
+    return cells;
+  }, []);
+
+  // 3. Define Rack Cell Coordinates (viewBox y: 6 to 24)
+  const RACK_CELLS = useMemo(() => {
+    const cells = [];
+
+    // Row A: 18 cells, x = 0.3m. Spans y = 6.0 to 24.0
+    for (let r = 1; r <= 18; r++) {
+      cells.push({
+        rackCode: "A",
+        rowNumber: r,
+        x: 0.3,
+        y: 6.0 + (r - 1) * 1.0,
+        w: 1.2,
+        h: 1.0
+      });
+    }
+
+    // Row B: 16 cells, x = 4.25m. Spans y = 6.0 to 22.0
+    for (let r = 1; r <= 16; r++) {
+      cells.push({
+        rackCode: "B",
+        rowNumber: r,
+        x: 4.25,
+        y: 6.0 + (r - 1) * 1.0,
+        w: 1.2,
+        h: 1.0
+      });
+    }
+
+    // Row C: 16 cells, x = 5.45m (touching B). Spans y = 6.0 to 22.0
+    for (let r = 1; r <= 16; r++) {
+      cells.push({
+        rackCode: "C",
+        rowNumber: r,
+        x: 5.45,
+        y: 6.0 + (r - 1) * 1.0,
+        w: 1.2,
+        h: 1.0
+      });
+    }
+
+    // Row D: 15 cells, x = 9.4m. Spans y = 6.0 to 21.0
+    for (let r = 1; r <= 15; r++) {
+      cells.push({
+        rackCode: "D",
+        rowNumber: r,
+        x: 9.4,
+        y: 6.0 + (r - 1) * 1.0,
+        w: 1.2,
+        h: 1.0
+      });
+    }
+
+    // Row E: 15 cells, x = 10.6m (touching D). Spans y = 6.0 to 21.0
+    for (let r = 1; r <= 15; r++) {
+      cells.push({
+        rackCode: "E",
+        rowNumber: r,
+        x: 10.6,
+        y: 6.0 + (r - 1) * 1.0,
+        w: 1.2,
+        h: 1.0
+      });
+    }
+
+    return cells;
+  }, []);
+
+  // 4. Search Filter Logic
+  const isCellMatched = (positions: any[]) => {
+    if (!search) return false;
+    const s = search.toLowerCase();
+    return positions.some((pos: any) => {
+      if (pos.positionCode.toLowerCase().includes(s)) return true;
+      return pos.stockLedgers.some((ledger: any) => {
+        return (
+          ledger.batchNumber?.toLowerCase().includes(s) ||
+          ledger.product.productCode.toLowerCase().includes(s) ||
+          ledger.product.productName.toLowerCase().includes(s)
+        );
+      });
+    });
+  };
+
+  // Hover Tooltip Handlers
+  const handleMouseMove = (e: React.MouseEvent, rackCode: string, rowNumber: number, positions: any[]) => {
+    const container = e.currentTarget.closest(".map-container");
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
     
-    let bgColor = "bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-500/50";
-    if (status.percent > 80) bgColor = "bg-orange-500/20 hover:bg-orange-500/30 border-orange-500/50";
-    if (status.percent > 95) bgColor = "bg-red-500/20 hover:bg-red-500/30 border-red-500/50";
-    if (rack.rackType === "floor") bgColor = "bg-red-500/10 hover:bg-red-500/20 border-red-500/40";
+    // Position tooltip slightly offset from mouse cursor
+    setHoveredCell({
+      rackCode,
+      rowNumber,
+      positions,
+      x: e.clientX - rect.left + 15,
+      y: e.clientY - rect.top + 15,
+    });
+  };
 
-    return (
-      <div 
-        onClick={() => handleRackClick(rack)}
-        className={`cursor-pointer transition-all border-2 rounded-md flex items-center justify-center flex-col relative overflow-hidden group ${bgColor} ${className}`}
-      >
-        <div 
-          className="absolute bottom-0 left-0 right-0 bg-black/10 transition-all duration-500" 
-          style={{ height: `${status.percent}%` }}
-        />
-        <span className="font-bold text-slate-800 z-10 text-lg group-hover:scale-110 transition-transform">
-          {label || rackCode}
-        </span>
-        <span className="text-xs text-slate-600 font-medium z-10">{status.percent}% Full</span>
-      </div>
-    );
+  // Determine cell colors based on occupancy percentage
+  const getCellColors = (percent: number, isFloor: boolean, isMatched: boolean) => {
+    if (isMatched) {
+      return {
+        fill: "url(#glowGradient)",
+        stroke: "#f59e0b",
+        strokeWidth: 0.12,
+        className: "animate-pulse shadow-lg cursor-pointer transition-all duration-300"
+      };
+    }
+
+    if (isFloor) {
+      // Floor Storage (Red) color scheme
+      if (percent === 0) {
+        return {
+          fill: "#fef2f2",
+          stroke: "#fca5a5",
+          strokeWidth: 0.05,
+          className: "hover:fill-red-100 hover:stroke-red-400 cursor-pointer transition-all duration-200"
+        };
+      } else {
+        return {
+          fill: "#fee2e2",
+          stroke: "#ef4444",
+          strokeWidth: 0.08,
+          className: "hover:fill-red-200 cursor-pointer transition-all duration-200"
+        };
+      }
+    } else {
+      // Rack Storage (Green) color scheme based on occupancy
+      if (percent === 0) {
+        return {
+          fill: "#f8fafc",
+          stroke: "#e2e8f0",
+          strokeWidth: 0.05,
+          className: "hover:fill-slate-100 cursor-pointer transition-all duration-200"
+        };
+      } else if (percent < 80) {
+        // Available (emerald)
+        return {
+          fill: "#d1fae5",
+          stroke: "#10b981",
+          strokeWidth: 0.06,
+          className: "hover:fill-emerald-200 cursor-pointer transition-all duration-200"
+        };
+      } else if (percent < 100) {
+        // >80% Full (orange)
+        return {
+          fill: "#ffedd5",
+          stroke: "#f97316",
+          strokeWidth: 0.07,
+          className: "hover:fill-orange-200 cursor-pointer transition-all duration-200"
+        };
+      } else {
+        // Full (red)
+        return {
+          fill: "#fee2e2",
+          stroke: "#ef4444",
+          strokeWidth: 0.08,
+          className: "hover:fill-red-200 cursor-pointer transition-all duration-200"
+        };
+      }
+    }
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-8">
-        <div className="relative w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+    <div className="p-6 bg-slate-50/50">
+      
+      {/* ─── STATISTICS / KPI CARDS ──────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Capacity</p>
+            <h3 className="text-2xl font-bold text-slate-800">{stats.total} PP</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
+            <Package className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Occupied</p>
+            <h3 className="text-2xl font-bold text-slate-800">{stats.occupied} PP</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Available</p>
+            <h3 className="text-2xl font-bold text-slate-800">{stats.available} PP</h3>
+          </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
+            <Activity className="w-6 h-6" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Occupancy Rate</p>
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-2xl font-bold text-slate-800">{stats.rate}%</h3>
+              <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                <div className="bg-amber-500 h-full" style={{ width: `${stats.rate}%` }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── TOOLBAR & SEARCH ────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center mb-6">
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
           <input 
             type="text" 
-            placeholder="Search product code or position..." 
+            placeholder="Search product code, batch, or position..." 
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-sm"
+            className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none text-sm font-medium"
           />
         </div>
-        <div className="flex gap-4 text-sm font-medium text-slate-600">
-          <div className="flex items-center gap-2"><div className="w-3 h-3 bg-emerald-500 rounded-full"></div> Available</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> &gt;80% Full</div>
-          <div className="flex items-center gap-2"><div className="w-3 h-3 bg-red-500 rounded-full"></div> Full</div>
-        </div>
-      </div>
-
-      <div className="bg-slate-100 rounded-3xl p-8 overflow-x-auto border-2 border-dashed border-slate-300">
-        <div className="min-w-[800px] h-[600px] relative mx-auto bg-white rounded-xl shadow-sm border p-8 flex flex-col justify-between">
-          
-          {/* Top Area: Floor Storage (Red) */}
-          <div className="w-full flex justify-center mb-8">
-            {renderRackBox("FLOOR", "w-3/4 h-20", "FLOOR STORAGE (RED)")}
+        
+        {/* Color Legend */}
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-slate-600 bg-white border px-4 py-2.5 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 bg-[#d1fae5] border border-[#10b981] rounded"></div>
+            <span>Rack Available (&lt;80%)</span>
           </div>
-
-          <div className="flex-1 flex justify-between px-12">
-            {/* Left Rack A */}
-            <div className="h-full flex flex-col justify-center">
-              {renderRackBox("A", "w-24 h-96")}
-            </div>
-
-            {/* Middle Racks B & C */}
-            <div className="h-full flex gap-1 justify-center items-center">
-              {renderRackBox("B", "w-20 h-[420px]")}
-              {renderRackBox("C", "w-20 h-[420px]")}
-            </div>
-
-            {/* Right Racks D & E */}
-            <div className="h-full flex gap-1 justify-center items-center">
-              {renderRackBox("D", "w-20 h-96")}
-              {renderRackBox("E", "w-20 h-96")}
-            </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 bg-[#ffedd5] border border-[#f97316] rounded"></div>
+            <span>Rack &gt;80% Full</span>
           </div>
-          
-          {/* Charging Station mock */}
-          <div className="absolute bottom-8 right-8 w-32 h-24 border-2 border-dashed border-slate-400 bg-slate-50 rounded-lg flex items-center justify-center text-slate-400 text-xs font-semibold text-center p-2">
-            Restruck Charging Station
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 bg-[#fee2e2] border border-[#ef4444] rounded"></div>
+            <span>Rack Full (100%)</span>
+          </div>
+          <div className="h-4 w-[1px] bg-slate-200 hidden sm:block"></div>
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 bg-[#fef2f2] border border-[#fca5a5] rounded"></div>
+            <span>Floor Storage Empty</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3.5 h-3.5 bg-[#fee2e2] border border-[#ef4444] rounded"></div>
+            <span>Floor Storage Occupied</span>
           </div>
         </div>
       </div>
 
-      <Dialog open={!!selectedRack} onOpenChange={(open) => !open && setSelectedRack(null)}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-2xl">
-              <Layers className="w-6 h-6 text-primary" />
-              {selectedRack?.rackName} Details
+      {/* ─── MAP CANVAS & LAYOUT ─────────────────────────────────── */}
+      <div className="bg-white border rounded-3xl p-6 lg:p-8 shadow-sm flex flex-col items-center">
+        
+        {/* Map Container */}
+        <div className="map-container relative w-full overflow-visible max-w-[550px]">
+          
+          <svg 
+            viewBox="-1.5 -1.0 17.5 29.5" 
+            className="w-full h-auto drop-shadow-sm" 
+            style={{ shapeRendering: "geometricPrecision" }}
+          >
+            {/* DEFINE GRADIENTS & PATTERNS */}
+            <defs>
+              <pattern id="grid" width="1" height="1" patternUnits="userSpaceOnUse">
+                <path d="M 1 0 L 0 0 0 1" fill="none" stroke="#f1f5f9" strokeWidth="0.03" />
+              </pattern>
+              
+              <linearGradient id="glowGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor="#fef3c7" />
+                <stop offset="100%" stopColor="#fde68a" />
+              </linearGradient>
+
+              <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#94a3b8" />
+              </marker>
+            </defs>
+
+            {/* Subtle Grid Background */}
+            <rect x="-1.5" y="-1.0" width="17.5" height="29.5" fill="url(#grid)" />
+
+            {/* 1. Structural Columns (Dashed Lines) */}
+            {/* Verticals every 3.625m */}
+            <line x1="3.625" y1="0" x2="3.625" y2="27" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
+            <line x1="7.25" y1="0" x2="7.25" y2="27" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
+            <line x1="10.875" y1="0" x2="10.875" y2="27" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
+            
+            {/* Horizontals */}
+            <line x1="0" y1="3.0" x2="14.5" y2="3.0" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
+            <line x1="0" y1="6.0" x2="14.5" y2="6.0" stroke="#94a3b8" strokeWidth="0.06" strokeDasharray="0.15 0.15" />
+            <line x1="0" y1="24.0" x2="14.5" y2="24.0" stroke="#94a3b8" strokeWidth="0.06" strokeDasharray="0.15 0.15" />
+
+            {/* 2. Warehouse Concrete Outer Walls */}
+            <rect x="0" y="0" width="14.5" height="27.0" fill="none" stroke="#475569" strokeWidth="0.12" rx="0.1" />
+
+            {/* 3. Restruck Charging Station */}
+            <rect x="11.5" y="24.0" width="3.0" height="3.0" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="0.07" strokeDasharray="0.1 0.1" rx="0.15" />
+            <text x="13.0" y="25.2" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">Restruck</text>
+            <text x="13.0" y="25.65" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">charging</text>
+            <text x="13.0" y="26.1" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">station</text>
+
+            {/* 4. Render Red Floor Storage Cells (32 cells) */}
+            {FLOOR_CELLS.map((cell) => {
+              const { positions, percent } = getCellData("FLOOR", cell.rowNumber);
+              const matched = isCellMatched(positions);
+              const colors = getCellColors(percent, true, matched);
+              
+              return (
+                <rect
+                  key={`floor-${cell.rowNumber}`}
+                  x={cell.x}
+                  y={cell.y}
+                  width={cell.w}
+                  height={cell.h}
+                  fill={colors.fill}
+                  stroke={colors.stroke}
+                  strokeWidth={colors.strokeWidth}
+                  className={colors.className}
+                  onClick={() => setSelectedCell({ rackCode: "FLOOR", rowNumber: cell.rowNumber, positions })}
+                  onMouseMove={(e) => handleMouseMove(e, "FLOOR", cell.rowNumber, positions)}
+                  onMouseLeave={() => setHoveredCell(null)}
+                  rx="0.06"
+                />
+              );
+            })}
+
+            {/* 5. Render Green Rack Cells (Rows A, B, C, D, E) */}
+            {RACK_CELLS.map((cell) => {
+              const { positions, percent } = getCellData(cell.rackCode, cell.rowNumber);
+              const matched = isCellMatched(positions);
+              const colors = getCellColors(percent, false, matched);
+
+              return (
+                <g key={`rack-${cell.rackCode}-${cell.rowNumber}`}>
+                  <rect
+                    x={cell.x}
+                    y={cell.y}
+                    width={cell.w}
+                    height={cell.h}
+                    fill={colors.fill}
+                    stroke={colors.stroke}
+                    strokeWidth={colors.strokeWidth}
+                    className={colors.className}
+                    onClick={() => setSelectedCell({ rackCode: cell.rackCode, rowNumber: cell.rowNumber, positions })}
+                    onMouseMove={(e) => handleMouseMove(e, cell.rackCode, cell.rowNumber, positions)}
+                    onMouseLeave={() => setHoveredCell(null)}
+                    rx="0.06"
+                  />
+                  {/* Tiny row number text in center of cell */}
+                  <text
+                    x={cell.x + cell.w / 2}
+                    y={cell.y + cell.h / 2 + 0.12}
+                    textAnchor="middle"
+                    fontSize="0.32"
+                    fontWeight="bold"
+                    fill="#475569"
+                    className="select-none pointer-events-none opacity-60"
+                  >
+                    {cell.rowNumber}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* 6. Rack Row Labels (Matching drawing layout) */}
+            {/* Label A */}
+            <text x="0.9" y="26.0" textAnchor="middle" fontSize="0.7" fontWeight="bold" fill="#1e293b">A</text>
+            
+            {/* Labels B & C */}
+            <text x="4.85" y="23.2" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">B</text>
+            <text x="6.05" y="23.2" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">C</text>
+
+            {/* Labels D & E */}
+            <text x="10.0" y="22.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">D</text>
+            <text x="11.2" y="22.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">E</text>
+
+            {/* 7. CAD Dimension Lines & Arrows */}
+            {/* Total Width Arrow (14.5m) */}
+            <line x1="0" y1="27.8" x2="14.5" y2="27.8" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <line x1="0" y1="27.0" x2="0" y2="28.2" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <line x1="14.5" y1="27.0" x2="14.5" y2="28.2" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="6.3" y="27.4" width="1.9" height="0.8" fill="#ffffff" rx="0.1" />
+            <text x="7.25" y="27.95" textAnchor="middle" fontSize="0.45" fontWeight="bold" fill="#64748b">14,5m</text>
+
+            {/* Column Spacing Arrow (3.625m) */}
+            <line x1="0" y1="-0.4" x2="3.625" y2="-0.4" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <line x1="3.625" y1="-0.7" x2="3.625" y2="0.2" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="1.0" y="-0.8" width="1.6" height="0.8" fill="#ffffff" rx="0.1" />
+            <text x="1.81" y="-0.25" textAnchor="middle" fontSize="0.4" fontWeight="bold" fill="#64748b">3,625m</text>
+
+            {/* Top Section Height Arrow (6m) */}
+            <line x1="-0.8" y1="0" x2="-0.8" y2="6.0" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <line x1="-1.1" y1="6.0" x2="0.1" y2="6.0" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="-1.2" y="2.5" width="0.8" height="1.0" fill="#ffffff" rx="0.1" />
+            <text x="-0.8" y="3.1" textAnchor="middle" fontSize="0.45" transform="rotate(-90 -0.8 3.0)" fontWeight="bold" fill="#64748b">6m</text>
+
+            {/* Middle Section Height Arrow (18m) */}
+            <line x1="15.3" y1="6.0" x2="15.3" y2="24.0" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <line x1="14.4" y1="24.0" x2="15.6" y2="24.0" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="14.9" y="14.2" width="0.8" height="1.6" fill="#ffffff" rx="0.1" />
+            <text x="15.3" y="15.2" textAnchor="middle" fontSize="0.45" transform="rotate(90 15.3 15.0)" fontWeight="bold" fill="#64748b">18m</text>
+
+            {/* Bottom Section Height Arrow (3m) */}
+            <line x1="-0.8" y1="24.0" x2="-0.8" y2="27.0" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <line x1="-1.1" y1="27.0" x2="0.1" y2="27.0" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="-1.2" y="25.0" width="0.8" height="1.0" fill="#ffffff" rx="0.1" />
+            <text x="-0.8" y="25.6" textAnchor="middle" fontSize="0.4" transform="rotate(-90 -0.8 25.5)" fontWeight="bold" fill="#64748b">3m</text>
+
+            {/* Aisle Dimension Arrows */}
+            {/* A-B (2.75m) */}
+            <line x1="1.5" y1="8.0" x2="4.25" y2="8.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="2.875" y="7.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
+
+            {/* C-D (2.75m) */}
+            <line x1="6.65" y1="8.0" x2="9.4" y2="8.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="8.025" y="7.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
+
+            {/* E-Wall (2.75m) */}
+            <line x1="11.8" y1="8.0" x2="14.5" y2="8.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="13.15" y="7.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
+
+            {/* Cell Size indicator (E15 cell) */}
+            {/* Width 1.2m */}
+            <line x1="10.6" y1="21.4" x2="11.8" y2="21.4" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="11.2" y="21.8" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">1,2m</text>
+            {/* Height 1.0m */}
+            <line x1="12.1" y1="20.0" x2="12.1" y2="21.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="12.5" y="20.5" textAnchor="middle" fontSize="0.28" transform="rotate(-90 12.5 20.5)" fontWeight="bold" fill="#64748b">1m</text>
+
+            {/* Charging Station width indicator */}
+            <line x1="11.5" y1="27.4" x2="14.5" y2="27.4" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="13.0" y="27.7" textAnchor="middle" fontSize="0.3" fontWeight="bold" fill="#64748b">3m</text>
+          </svg>
+
+          {/* ─── LIVE FLOATING HOVER CARD ──────────────────────────── */}
+          {hoveredCell && (
+            <div 
+              className="absolute z-30 pointer-events-none bg-slate-900/95 text-white p-3 rounded-xl shadow-xl border border-slate-700/50 text-xs w-64 backdrop-blur-sm transition-all duration-75"
+              style={{ left: `${hoveredCell.x}px`, top: `${hoveredCell.y}px` }}
+            >
+              <div className="flex justify-between items-center border-b border-slate-700/80 pb-1.5 mb-1.5">
+                <span className="font-bold flex items-center gap-1 text-slate-300">
+                  <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                  {(() => {
+                    const { rack } = getCellData(hoveredCell.rackCode, hoveredCell.rowNumber);
+                    return rack ? rack.rackName : (hoveredCell.rackCode === "FLOOR" ? "Floor Position" : `Rack ${hoveredCell.rackCode}`);
+                  })()} - Row {String(hoveredCell.rowNumber).padStart(2, '0')}
+                </span>
+                <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
+                  {hoveredCell.positions.length} Lvl
+                </span>
+              </div>
+              
+              <div className="space-y-1.5">
+                <p className="text-slate-400 font-semibold flex justify-between">
+                  <span>Occupancy:</span>
+                  <span className={hoveredCell.positions.filter(p => p.isOccupied).length === hoveredCell.positions.length ? "text-rose-400" : "text-emerald-400"}>
+                    {hoveredCell.positions.filter(p => p.isOccupied).length} / {hoveredCell.positions.length} Occupied
+                  </span>
+                </p>
+                
+                {hoveredCell.positions.some(p => p.isOccupied) ? (
+                  <div className="border-t border-slate-800 pt-1.5 mt-1 space-y-1">
+                    <p className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Products Stored:</p>
+                    {hoveredCell.positions.filter(p => p.isOccupied).map(pos => {
+                      const { rack } = getCellData(hoveredCell.rackCode, hoveredCell.rowNumber);
+                      return (
+                        <div key={pos.id} className="bg-slate-800/50 p-1 rounded border border-slate-800/80">
+                          <p className="font-semibold text-slate-200 line-clamp-1">{pos.stockLedgers[0]?.product.productName}</p>
+                          <p className="text-[10px] text-slate-400 font-mono flex justify-between">
+                            <span>{getLevelName(rack, pos.levelNumber)}</span>
+                            <span>Qty: {pos.stockLedgers[0]?.quantity} pcs</span>
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[10px] italic text-slate-500 text-center py-1">Empty Shelf Space</p>
+                )}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+
+      {/* ─── SPECIFICATIONS SUMMARY PANEL (FROM PHOTO) ──────────── */}
+      <div className="mt-8 bg-white border rounded-2xl p-6 shadow-sm">
+        <h4 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <Info className="w-4 h-4 text-indigo-500" />
+          Warehouse Layout Specifications
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+          
+          <div className="space-y-2.5">
+            <h5 className="font-bold text-slate-700 border-b pb-1">Rack Setup Details</h5>
+            <ul className="space-y-1.5 text-xs font-medium text-slate-600">
+              <li className="flex justify-between">
+                <span>Row A (18 racks x 4 levels):</span>
+                <span className="font-bold text-slate-800">72 PP</span>
+              </li>
+              <li className="flex justify-between">
+                <span>Row B & C (32 racks x 4 levels):</span>
+                <span className="font-bold text-slate-800">128 PP</span>
+              </li>
+              <li className="flex justify-between">
+                <span>Row D & E (30 racks x 4 levels):</span>
+                <span className="font-bold text-slate-800">120 PP</span>
+              </li>
+              <li className="flex justify-between border-t pt-1.5">
+                <span className="font-semibold">Total Green Rack Space:</span>
+                <span className="font-bold text-slate-800">320 PP</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="space-y-2.5">
+            <h5 className="font-bold text-slate-700 border-b pb-1">Floor Storage Details</h5>
+            <ul className="space-y-1.5 text-xs font-medium text-slate-600">
+              <li className="flex justify-between">
+                <span>Floor Space (1 level):</span>
+                <span className="font-bold text-slate-800">32 PP</span>
+              </li>
+              <li className="flex justify-between">
+                <span>Floor Cell Equivalent:</span>
+                <span className="text-slate-500 italic">1 Layer Rack</span>
+              </li>
+              <li className="flex justify-between border-t pt-1.5">
+                <span className="font-semibold">Total Floor Space:</span>
+                <span className="font-bold text-slate-800">32 PP</span>
+              </li>
+            </ul>
+          </div>
+
+          <div className="space-y-2.5">
+            <h5 className="font-bold text-slate-700 border-b pb-1">Pallet Specifications</h5>
+            <ul className="space-y-1.5 text-xs font-medium text-slate-600">
+              <li className="flex justify-between">
+                <span>Standard Dimensions:</span>
+                <span className="font-semibold text-slate-800">1.2m (W) x 1.0m (L) x 1.0m (H)</span>
+              </li>
+              <li className="flex justify-between">
+                <span>Load Weight Capacity:</span>
+                <span className="font-semibold text-slate-800">480 - 700 Kg</span>
+              </li>
+              <li className="flex justify-between border-t pt-1.5">
+                <span className="font-semibold text-slate-800 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
+                  Total Capacity:
+                </span>
+                <span className="font-bold text-indigo-600">352 Pallet Positions</span>
+              </li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ─── DETAIL LEVEL STACK DIALOG ───────────────────────────── */}
+      <Dialog open={!!selectedCell} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedCell(null);
+          setIsEditing(false);
+        }
+      }}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl p-6 bg-white shadow-2xl">
+          <DialogHeader className="border-b pb-4 mb-4 flex flex-row items-center justify-between">
+            <DialogTitle className="flex items-center gap-2.5 text-2xl text-slate-800 w-full pr-8">
+              <Layers className="w-6 h-6 text-indigo-600 shrink-0" />
+              <div className="flex justify-between items-center w-full">
+                <span className="truncate">
+                  {selectedCell && (
+                    <>
+                      {getCellData(selectedCell.rackCode, selectedCell.rowNumber).rack?.rackName || (selectedCell.rackCode === "FLOOR" ? "Floor Storage" : `Rack ${selectedCell.rackCode}`)} - Row {String(selectedCell.rowNumber).padStart(2, '0')}
+                    </>
+                  )}
+                </span>
+                {selectedCell && !isEditing && (
+                  <button
+                    onClick={startEditing}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors ml-4 shrink-0"
+                  >
+                    <Pencil className="w-3 h-3" />
+                    Edit Names
+                  </button>
+                )}
+              </div>
             </DialogTitle>
           </DialogHeader>
 
-          {selectedRack && (
-            <div className="mt-4">
-              <div className="flex gap-2 mb-6 p-1 bg-slate-100 rounded-lg w-max">
-                {Array.from({ length: selectedRack.totalLevels }).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedLevel(i + 1)}
-                    className={`px-4 py-2 rounded-md font-medium text-sm transition-all ${
-                      selectedLevel === i + 1 
-                        ? 'bg-white shadow-sm text-primary' 
-                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
-                    }`}
-                  >
-                    Level {i + 1}
-                  </button>
-                ))}
-              </div>
+          {selectedCell && (
+            isEditing ? (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between border-b pb-2 mb-2">
+                  <h3 className="text-sm font-bold text-slate-700">Edit Rack & Level Names</h3>
+                  <span className="text-xs text-slate-400 font-mono">ID: {getCellData(selectedCell.rackCode, selectedCell.rowNumber).rack?.id}</span>
+                </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                {selectedRack.positions
-                  .filter((p: any) => p.levelNumber === selectedLevel)
-                  .map((pos: any) => {
-                    const isMatched = search && (pos.positionCode.toLowerCase().includes(search.toLowerCase()) || 
-                      pos.stockLedgers.some((s: any) => s.product.productCode.toLowerCase().includes(search.toLowerCase()) || 
-                      s.product.productName.toLowerCase().includes(search.toLowerCase())));
-                      
-                    return (
-                      <div 
-                        key={pos.id} 
-                        className={`p-3 rounded-xl border-2 flex flex-col gap-2 transition-colors ${
-                          pos.isOccupied 
-                            ? isMatched ? 'border-amber-400 bg-amber-50' : 'border-primary/30 bg-primary/5' 
-                            : isMatched ? 'border-amber-400 bg-amber-50' : 'border-dashed border-slate-200 bg-slate-50 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded shadow-sm border">
-                            {pos.positionCode}
-                          </span>
-                          {pos.isOccupied && <Package className="w-4 h-4 text-primary" />}
+                {editError && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    {editError}
+                  </div>
+                )}
+
+                {/* Rack Name */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Rack Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editRackName}
+                    onChange={(e) => setEditRackName(e.target.value)}
+                    placeholder="e.g. Rack A"
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-semibold"
+                  />
+                </div>
+
+                {/* Level / Tier Names */}
+                <div className="space-y-3.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide border-b pb-1">
+                    Level / Tier Aliases
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {Object.keys(editLevelAliases)
+                      .sort((a, b) => Number(a) - Number(b))
+                      .map((lvl) => (
+                        <div key={lvl} className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
+                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                            Level {lvl} Label
+                          </label>
+                          <input
+                            type="text"
+                            value={editLevelAliases[lvl]}
+                            onChange={(e) =>
+                              setEditLevelAliases((prev) => ({
+                                ...prev,
+                                [lvl]: e.target.value,
+                              }))
+                            }
+                            placeholder={`e.g. Tier ${lvl}`}
+                            className="w-full border rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-primary outline-none"
+                          />
                         </div>
-                        
-                        {pos.isOccupied && pos.stockLedgers[0] ? (
-                          <div className="mt-1 flex flex-col gap-1">
-                            <span className="text-[10px] font-semibold text-slate-600 line-clamp-1" title={pos.stockLedgers[0].product.productName}>
-                              {pos.stockLedgers[0].product.productName}
-                            </span>
-                            <span className="text-xs font-bold text-slate-800">
-                              {pos.stockLedgers[0].quantity} pcs <span className="text-slate-400 font-normal">({pos.stockLedgers[0].quantityLiter}L)</span>
-                            </span>
-                            <span className="text-[10px] text-slate-500 bg-slate-200/70 rounded px-1 w-max">
-                              Batch: {pos.stockLedgers[0].batchNumber || 'N/A'}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex-1 flex items-center justify-center text-slate-400">
-                            <span className="text-xs font-medium">Empty</span>
-                          </div>
-                        )}
-                      </div>
-                    )
-                })}
+                      ))}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3 pt-3 border-t">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditing(false)}
+                    disabled={isSavingEdit}
+                    className="flex-1 py-2 border rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <Undo className="w-3.5 h-3.5" />
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveEdit}
+                    disabled={isSavingEdit}
+                    className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-75"
+                  >
+                    {isSavingEdit ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3.5 h-3.5" />
+                        Save Changes
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs font-medium text-slate-500">
+                  Physical stack layout representing shelf levels (Level 4 at top down to Level 1 at floor).
+                </p>
+
+                {/* Stack View */}
+                <div className="flex flex-col gap-3">
+                  {/* Clone and reverse levels so Level 4 (highest) is rendered at the top */}
+                  {[...selectedCell.positions]
+                    .sort((a, b) => b.levelNumber - a.levelNumber)
+                    .map((pos) => {
+                      const matched = search && (
+                        pos.positionCode.toLowerCase().includes(search.toLowerCase()) || 
+                        pos.stockLedgers.some((s: any) => 
+                          s.product.productCode.toLowerCase().includes(search.toLowerCase()) || 
+                          s.product.productName.toLowerCase().includes(search.toLowerCase()) ||
+                          s.batchNumber?.toLowerCase().includes(search.toLowerCase())
+                        )
+                      );
+                      
+                      const currentRack = getCellData(selectedCell.rackCode, selectedCell.rowNumber).rack;
+                      const levelName = getLevelName(currentRack, pos.levelNumber);
+                      
+                      return (
+                        <div 
+                          key={pos.id} 
+                          className={`p-4 rounded-2xl border-2 transition-all flex flex-col gap-3 ${
+                            pos.isOccupied 
+                              ? matched ? 'border-amber-400 bg-amber-50/50 shadow-sm' : 'border-slate-200 bg-slate-50' 
+                              : matched ? 'border-amber-400 bg-amber-50/50 shadow-sm' : 'border-dashed border-slate-200 hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex justify-between items-center border-b pb-1.5 border-slate-200/50">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded shadow-sm">
+                                {levelName}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400">
+                                {pos.positionCode}
+                              </span>
+                            </div>
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              pos.isOccupied ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-100 text-slate-400'
+                            }`}>
+                              {pos.isOccupied ? 'Occupied' : 'Empty'}
+                            </span>
+                          </div>
+                          
+                          {pos.isOccupied && pos.stockLedgers[0] ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Info</p>
+                                <p className="font-bold text-slate-800 leading-tight">{pos.stockLedgers[0].product.productName}</p>
+                                <p className="text-[10px] font-mono text-slate-500">{pos.stockLedgers[0].product.productCode}</p>
+                              </div>
+                              
+                              <div className="space-y-1 bg-white p-2.5 rounded-xl border flex flex-col justify-between">
+                                <div className="flex justify-between">
+                                  <span className="font-medium text-slate-500">Qty:</span>
+                                  <span className="font-extrabold text-slate-800">{pos.stockLedgers[0].quantity} pcs</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="font-medium text-slate-500">Volume:</span>
+                                  <span className="font-bold text-slate-600">{pos.stockLedgers[0].quantityLiter} L</span>
+                                </div>
+                                <div className="flex justify-between border-t pt-1 mt-1 text-[10px]">
+                                  <span className="text-slate-400">Batch:</span>
+                                  <span className="font-semibold text-slate-600">{pos.stockLedgers[0].batchNumber || 'N/A'}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center text-slate-400 py-3 text-xs italic font-medium">
+                              No pallet stored on this shelf level
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )
           )}
         </DialogContent>
       </Dialog>
