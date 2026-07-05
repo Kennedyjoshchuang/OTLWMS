@@ -49,13 +49,17 @@ export async function POST(req: NextRequest) {
     const totalPallets = dt.totalPallets || Math.max(1, Math.ceil(totalPcs / 100)); // Default 1 pallet per 100 pcs if not specified
     const doCount = dt.deliveryOrders.length || 1;
 
-    // Define standard pricing rates (in IDR)
+    // Fetch active pricing rates from DB (fallback to defaults if not configured)
+    const pricingRates = await prisma.pricingRate.findMany({ where: { isActive: true } });
+    const getRate = (key: string, fallback: number) =>
+      pricingRates.find((r) => r.key === key)?.unitPrice ?? fallback;
+
     const RATES = {
-      handlingOut: 500, // Rp 500 per Liter
-      picking: 2000,    // Rp 2,000 per Pc
-      storage: 50000,   // Rp 50,000 per Pallet
-      delivery: 350000, // Rp 350,000 per Delivery Trip
-      admin: 25000,     // Rp 25,000 fixed
+      handlingOut: getRate("handling_out", 500),
+      picking:     getRate("picking",      2000),
+      storage:     getRate("storage",      50000),
+      delivery:    getRate("delivery",     350000),
+      admin:       getRate("admin",        25000),
     };
 
     const invoiceItemsData = [

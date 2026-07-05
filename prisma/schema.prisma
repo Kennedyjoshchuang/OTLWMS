@@ -28,6 +28,7 @@ model User {
   createdDOs            DeliveryOrder[]    @relation("DOCreatedBy")
   pickedItems           DOPickingItem[]
   stockMovements        StockMovement[]
+  deleteRequests        DeleteRequest[]
 }
 
 model Customer {
@@ -356,4 +357,31 @@ model Incident {
   location    String?
   reportedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
+}
+
+model PricingRate {
+  id          String   @id @default(cuid())
+  key         String   @unique  // handling_out | picking | storage | delivery | admin
+  label       String            // "Handling Out Fee"
+  description String?           // "Per liter produk keluar"
+  unit        String            // "/Liter" | "/Pcs" | "/Pallet" | "/Trip" | "Fixed"
+  unitPrice   Float             // e.g. 500
+  isActive    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
+model DeleteRequest {
+  id            String   @id @default(cuid())
+  targetModel   String   // "InboundReceipt" | "Product" | "Invoice"
+  targetId      String
+  targetLabel   String   // e.g. "GRN-2026-0001"
+  reason        String?
+  requestedById String
+  status        String   @default("pending") // pending | approved | rejected
+  reviewNote    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  requestedBy   User     @relation(fields: [requestedById], references: [id])
 }

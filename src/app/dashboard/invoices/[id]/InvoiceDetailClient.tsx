@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Printer, Check, Receipt, CreditCard, Calendar, Truck, User, FileText, Download } from "lucide-react";
+import { ArrowLeft, Printer, Check, Receipt, CreditCard, Calendar, Truck, User, FileText, Download, X, Trash2, Clock, MessageSquare, AlertTriangle, AlertCircle, Loader2 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
+import { useEffect } from "react";
 
 interface InvoiceItem {
   id: string;
@@ -73,6 +74,26 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
   const [invoice, setInvoice] = useState<Invoice>(initialInvoice);
   const [updating, setUpdating] = useState(false);
   const router = useRouter();
+
+  // Delete Request state
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [isDeletePending, setIsDeletePending] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/delete-requests?status=pending")
+      .then((r) => r.json())
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          const isPending = data.some((d) => d.targetModel === "Invoice" && d.targetId === invoice.id);
+          setIsDeletePending(isPending);
+        }
+      })
+      .catch(() => {});
+  }, [invoice.id]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -162,8 +183,30 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
               onClick={() => handleUpdateStatus("draft")}
               disabled={updating}
               className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+              title="Undo Paid Status"
             >
-              Revert to Draft
+              <X className="w-4 h-4" />
+              Undo (Revert to Draft)
+            </button>
+          )}
+
+          {isDeletePending ? (
+            <span className="flex items-center gap-2 bg-yellow-100 text-yellow-700 border border-yellow-200 px-4 py-2 rounded-xl text-sm font-medium">
+              <Clock className="w-4 h-4" />
+              Delete Pending
+            </span>
+          ) : (
+            <button
+              onClick={() => {
+                setShowDeleteModal(true);
+                setDeleteReason("");
+                setDeleteError("");
+                setDeleteSuccess(false);
+              }}
+              className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+            >
+              <Trash2 className="w-4 h-4" />
+              Pengajuan Delete
             </button>
           )}
         </div>
@@ -213,9 +256,9 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
                 <span>Omega Trust Logistik</span>
               </div>
               <p className="text-slate-500 text-sm max-w-xs leading-relaxed">
-                Warehouse & Logistics 3PL Provider<br />
-                Batamindo Industrial Park, Batam City<br />
-                Kepulauan Riau, Indonesia
+                Warehouse &amp; Logistics 3PL Provider<br />
+                Jl. Pondok Indah Raya II No.13, Pemecutan Kaja<br />
+                Kec. Denpasar Utara, Kota Denpasar, Bali 80111
               </p>
             </div>
 
@@ -348,7 +391,7 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
               <h5 className="font-bold text-slate-700 uppercase tracking-wider">Payment Instructions</h5>
               <p>Please send payments to the following bank account within 30 days of the invoice issue date:</p>
               <div className="space-y-1 pt-1 font-medium text-slate-700">
-                <p>Bank: Bank Mandiri Batam</p>
+                <p>Bank: Bank Mandiri Bali</p>
                 <p>Account Name: PT. OMEGA TRUST LOGISTIK</p>
                 <p>Account Number: 109-00-1234567-8</p>
               </div>
@@ -385,6 +428,119 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
 
         </div>
       </div>
+
+      {/* ── Delete Request Modal ────────────────────────────────────────── */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => { if (!deleteSubmitting) { setShowDeleteModal(false); } }}
+          />
+          <div className="relative z-10 w-full max-w-md mx-4 bg-white rounded-3xl shadow-2xl p-6">
+            {deleteSuccess ? (
+              <div className="flex flex-col items-center gap-4 text-center py-6">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <Check className="w-8 h-8 text-emerald-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Request Submitted!</h3>
+                <p className="text-slate-500 text-sm">Your deletion request has been sent to the Owner for review.</p>
+                <button
+                  onClick={() => { setShowDeleteModal(false); setDeleteSuccess(false); }}
+                  className="mt-2 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Request Deletion</h2>
+                    <p className="text-xs text-slate-500">Submit a deletion request to the Owner (super admin)</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-3 mb-4">
+                  <p className="text-sm font-semibold text-slate-700">{invoice.invoiceNumber}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Amount: {formatCurrency(invoice.totalAmount)}</p>
+                </div>
+
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-yellow-700 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>This request will be reviewed by the <strong>super admin (Owner)</strong> before deletion is executed.</span>
+                </div>
+
+                {deleteError && (
+                  <div className="mb-4 flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {deleteError}
+                  </div>
+                )}
+
+                <div className="mb-5">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Reason for Deletion (optional)
+                  </label>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    rows={3}
+                    placeholder="Explain why this Invoice should be deleted..."
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { if (!deleteSubmitting) setShowDeleteModal(false); }}
+                    disabled={deleteSubmitting}
+                    className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setDeleteSubmitting(true);
+                      setDeleteError("");
+                      try {
+                        const res = await fetch("/api/delete-requests", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            targetModel: "Invoice",
+                            targetId: invoice.id,
+                            targetLabel: invoice.invoiceNumber,
+                            reason: deleteReason.trim() || null,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Failed to submit request.");
+                        setIsDeletePending(true);
+                        setDeleteSuccess(true);
+                      } catch (err: any) {
+                        setDeleteError(err.message);
+                      } finally {
+                        setDeleteSubmitting(false);
+                      }
+                    }}
+                    disabled={deleteSubmitting}
+                    className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm shadow-red-200 disabled:opacity-70"
+                  >
+                    {deleteSubmitting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+                    ) : (
+                      <><MessageSquare className="w-4 h-4" /> Submit Request</>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

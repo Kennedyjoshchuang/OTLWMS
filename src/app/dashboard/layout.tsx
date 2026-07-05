@@ -2,13 +2,13 @@
 
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, usePathname } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { 
   LayoutDashboard, Package, Inbox, Truck, FileText, 
-  Map, Settings, LogOut, Loader2, Menu, Users, Receipt, Box
+  Map, Settings, LogOut, Loader2, Menu, Users, Receipt, Box, ShieldCheck
 } from "lucide-react";
-import { useState } from "react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
@@ -39,13 +39,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { name: "Inbound (GRN)", href: "/dashboard/inbound", icon: Inbox, roles: ["super_admin", "warehouse_admin", "checker_inbound"] },
     { name: "Products", href: "/dashboard/products", icon: Box, roles: ["super_admin", "warehouse_admin"] },
     { name: "Warehouse Map", href: "/dashboard/warehouse", icon: Map, roles: ["super_admin", "warehouse_admin", "checker_inbound", "picker"] },
-    { name: "Delivery Tickets", href: "/dashboard/delivery-tickets", icon: FileText, roles: ["super_admin", "warehouse_admin"] },
+    { name: "Pick Lists", href: "/dashboard/delivery-tickets", icon: FileText, roles: ["super_admin", "warehouse_admin"] },
     { name: "Billing & Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["super_admin", "warehouse_admin", "customer_viewer"] },
-    { name: "Delivery Orders", href: "/dashboard/delivery-orders", icon: Package, roles: ["super_admin", "warehouse_admin", "picker"] },
+    { name: "Outbound", href: "/dashboard/delivery-orders", icon: Package, roles: ["super_admin", "warehouse_admin", "picker"] },
     { name: "Deliveries", href: "/dashboard/deliveries", icon: Truck, roles: ["super_admin", "warehouse_admin", "driver"] },
     { name: "Employees", href: "/dashboard/employees", icon: Users, roles: ["super_admin", "warehouse_admin"] },
     { name: "Reports", href: "/dashboard/reports", icon: FileText, roles: ["super_admin", "warehouse_admin", "customer_viewer"] },
     { name: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["super_admin"] },
+    { name: "Owner Page", href: "/dashboard/delete-requests", icon: ShieldCheck, roles: ["super_admin"] },
   ];
 
   const allowedNav = navItems.filter(item => item.roles.includes(role));
@@ -54,15 +55,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-slate-300 transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static`}>
-        <div className="h-16 flex items-center px-6 bg-slate-950/50">
-          <Package className="w-6 h-6 text-primary mr-3" />
-          <span className="text-white font-bold tracking-wide">Omega Trust</span>
+        <div className="flex flex-col items-center py-6 px-4 bg-slate-950/50 border-b border-slate-800">
+          <div className="flex items-center justify-center gap-3 mb-4">
+            <Image src="/logo.png" alt="Omega Logo" width={56} height={56} className="object-contain" />
+            <div className="w-[1.5px] h-10 bg-slate-800" />
+            <Image src="/jotun-logo.png" alt="Jotun Logo" width={80} height={44} className="object-contain" />
+          </div>
+          <span className="text-white font-extrabold tracking-wide text-sm text-center leading-tight">
+            Jotun Bali<br />Warehouse Management System
+          </span>
         </div>
         
         <div className="p-4">
-          <div className="mb-6 px-2 py-3 bg-slate-800/50 rounded-xl">
-            <p className="text-sm font-medium text-white">{session.user?.name}</p>
-            <p className="text-xs text-primary capitalize mt-1">{role.replace('_', ' ')}</p>
+          <div className="mb-6 px-4 py-4 bg-slate-800/50 rounded-xl">
+            <p className="text-base font-semibold text-white">{session.user?.name}</p>
+            <p className="text-sm text-primary capitalize mt-1">{role.replace('_', ' ')}</p>
           </div>
 
           <nav className="space-y-1">
@@ -105,7 +112,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             {allowedNav.find(n => pathname === n.href || pathname.startsWith(n.href + '/'))?.name || "Dashboard"}
           </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-500">Omega Trust Logistik WMS</span>
+            <span className="text-sm text-slate-500">Jotun Bali Warehouse Management System</span>
           </div>
         </header>
 

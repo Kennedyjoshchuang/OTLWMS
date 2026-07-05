@@ -8,7 +8,9 @@ export function cn(...inputs: ClassValue[]) {
 export function formatDate(date: Date | string | null, opts?: Intl.DateTimeFormatOptions) {
   if (!date) return '-'
   return new Date(date).toLocaleDateString('id-ID', {
-    day: '2-digit', month: 'short', year: 'numeric', ...opts,
+    day: '2-digit', month: 'short', year: 'numeric',
+    timeZone: 'Asia/Makassar', // WITA (UTC+8)
+    ...opts,
   })
 }
 
@@ -17,6 +19,7 @@ export function formatDateTime(date: Date | string | null) {
   return new Date(date).toLocaleString('id-ID', {
     day: '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
+    timeZone: 'Asia/Makassar', // WITA (UTC+8)
   })
 }
 
@@ -45,14 +48,16 @@ export const STATUS_COLOR: Record<string, string> = {
   rejected: 'bg-red-500',
   completed: 'bg-green-600',
   in_progress: 'bg-blue-500',
+  outbounded: 'bg-purple-600',
+  partially_outbounded: 'bg-indigo-500',
   discrepancy: 'bg-red-500',
   processing: 'bg-blue-400',
   ready: 'bg-cyan-500',
   picking: 'bg-purple-500',
   ready_to_ship: 'bg-indigo-500',
   shipped: 'bg-indigo-600',
-  on_delivery: 'bg-blue-600',
-  delivered: 'bg-green-600',
+  on_delivery: 'bg-green-600',
+  delivered: 'bg-emerald-500',
   cancelled: 'bg-red-600',
   excess: 'bg-orange-400',
   shortage: 'bg-red-400',
@@ -67,15 +72,17 @@ export const STATUS_LABEL: Record<string, string> = {
   partially_delivered: 'Partial Delivered',
   rejected: 'Rejected',
   completed: 'Completed',
-  in_progress: 'In Progress',
+  in_progress: 'Inbound',
+  outbounded: 'Outbounded',
+  partially_outbounded: 'Partially Outbounded',
   discrepancy: 'Discrepancy',
   processing: 'Processing',
-  ready: 'Ready',
+  ready: 'Waiting to be Picked',
   picking: 'Picking',
   ready_to_ship: 'Ready to Ship',
   shipped: 'Shipped',
-  on_delivery: 'On Delivery',
-  delivered: 'Delivered',
+  on_delivery: 'Delivered',
+  delivered: 'Picked',
   cancelled: 'Cancelled',
   excess: 'Excess',
   shortage: 'Shortage',

@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import Select from "react-select";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
 import {
-  Search, Inbox, ArrowRight, Plus, X, Trash2,
-  PackagePlus, Loader2, CheckCircle2, AlertCircle,
+  Search, Inbox, Plus, X, Trash2,
+  PackagePlus, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
+  Clock, MessageSquare, Undo2,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -57,6 +59,32 @@ export default function InboundClient({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Undo state
+  const [undoTargetId, setUndoTargetId] = useState<string | null>(null);
+  const [undoError, setUndoError] = useState("");
+  const [undoSuccess, setUndoSuccess] = useState(false);
+
+  // Delete request state
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+
+  // Fetch pending delete requests on mount
+  useEffect(() => {
+    fetch("/api/delete-requests?status=pending")
+      .then((r) => r.json())
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          const ids = new Set<string>(data.filter((d) => d.targetModel === "InboundReceipt").map((d) => d.targetId));
+          setPendingDeleteIds(ids);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Form state
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
@@ -201,6 +229,32 @@ export default function InboundClient({
     }
   };
 
+  // ── Undo
+  const handleUndo = async (receiptId: string) => {
+    if (!confirm("Are you sure you want to undo this Inbound Receipt? The stock will be removed from the warehouse.")) return;
+    
+    setUndoTargetId(receiptId);
+    setUndoError("");
+    setUndoSuccess(false);
+
+    try {
+      const res = await fetch(`/api/inbound/${receiptId}/undo`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to undo receipt.");
+
+      setUndoSuccess(true);
+      alert("Receipt undone successfully.");
+      startTransition(() => router.refresh());
+    } catch (err: any) {
+      setUndoError(err.message);
+      alert(err.message);
+    } finally {
+      setUndoTargetId(null);
+    }
+  };
+
   const totalPcs = items.reduce((s, it) => s + Number(it.qty || 0), 0);
   const totalLiter = items.reduce(
     (s, it) => s + Number(it.qty || 0) * Number(it.sizeLiter || 0),
@@ -260,7 +314,14 @@ export default function InboundClient({
                     <td className="px-6 py-4 font-medium text-slate-800">{receipt.receiptNumber}</td>
                     <td className="px-6 py-4">{receipt.customer?.name}</td>
                     <td className="px-6 py-4">{formatDateTime(receipt.receivedDate)}</td>
-                    <td className="px-6 py-4">{receipt.totalPcsReceived} pcs</td>
+                    <td className="px-6 py-4">
+                      <div>{receipt.totalPcsReceived} pcs</div>
+                      {receipt.outboundedQty > 0 && (
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          Outbounded: {receipt.outboundedQty} pcs
+                        </div>
+                      )}
+                    </td>
                     <td className="px-6 py-4">{receipt.checker?.fullName || "-"}</td>
                     <td className="px-6 py-4">
                       <span
@@ -272,12 +333,38 @@ export default function InboundClient({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                        title="View Detail"
-                      >
-                        <ArrowRight className="w-4 h-4" />
-                      </button>
+                      <div className="flex justify-end gap-1.5">
+                        {receipt.status !== "discrepancy" && (
+                          <button
+                            onClick={() => handleUndo(receipt.id)}
+                            disabled={undoTargetId === receipt.id}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
+                            title="Undo GRN"
+                          >
+                            {undoTargetId === receipt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+                            Undo
+                          </button>
+                        )}
+                        {pendingDeleteIds.has(receipt.id) ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
+                            <Clock className="w-3 h-3" />
+                            Delete Pending
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setDeleteTarget(receipt);
+                              setDeleteReason("");
+                              setDeleteError("");
+                              setDeleteSuccess(false);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Pengajuan Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -528,6 +615,119 @@ export default function InboundClient({
                   </button>
                 </div>
               </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Request Modal ────────────────────────────────────────── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={() => { if (!deleteSubmitting) { setDeleteTarget(null); } }}
+          />
+          <div className="relative z-10 w-full max-w-md mx-4 bg-white rounded-3xl shadow-2xl p-6">
+            {deleteSuccess ? (
+              <div className="flex flex-col items-center gap-4 text-center py-6">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Request Submitted!</h3>
+                <p className="text-slate-500 text-sm">Your deletion request has been sent to the Owner for review.</p>
+                <button
+                  onClick={() => { setDeleteTarget(null); setDeleteSuccess(false); }}
+                  className="mt-2 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-800">Request Deletion</h2>
+                    <p className="text-xs text-slate-500">Submit a deletion request to the Owner (super admin)</p>
+                  </div>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-3 mb-4">
+                  <p className="text-sm font-semibold text-slate-700">{deleteTarget.receiptNumber}</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Customer: {deleteTarget.customer?.name}</p>
+                </div>
+
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-yellow-700 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>This request will be reviewed by the <strong>super admin (Owner)</strong> before deletion is executed.</span>
+                </div>
+
+                {deleteError && (
+                  <div className="mb-4 flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {deleteError}
+                  </div>
+                )}
+
+                <div className="mb-5">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Reason for Deletion (optional)
+                  </label>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    rows={3}
+                    placeholder="Explain why this GRN should be deleted..."
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { if (!deleteSubmitting) setDeleteTarget(null); }}
+                    disabled={deleteSubmitting}
+                    className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setDeleteSubmitting(true);
+                      setDeleteError("");
+                      try {
+                        const res = await fetch("/api/delete-requests", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            targetModel: "InboundReceipt",
+                            targetId: deleteTarget.id,
+                            targetLabel: deleteTarget.receiptNumber,
+                            reason: deleteReason.trim() || null,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || "Failed to submit request.");
+                        setPendingDeleteIds((prev) => new Set([...prev, deleteTarget.id]));
+                        setDeleteSuccess(true);
+                      } catch (err: any) {
+                        setDeleteError(err.message);
+                      } finally {
+                        setDeleteSubmitting(false);
+                      }
+                    }}
+                    disabled={deleteSubmitting}
+                    className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm shadow-red-200 disabled:opacity-70"
+                  >
+                    {deleteSubmitting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+                    ) : (
+                      <><MessageSquare className="w-4 h-4" /> Submit Request</>
+                    )}
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>

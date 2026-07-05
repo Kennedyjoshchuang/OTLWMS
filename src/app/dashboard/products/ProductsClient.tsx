@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, X, Loader2, CheckCircle2, AlertCircle,
   Pencil, Trash2, Box, ChevronDown, PackageSearch, ToggleLeft, ToggleRight,
+  AlertTriangle, Clock, MessageSquare,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -77,9 +78,26 @@ export default function ProductsClient({
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Delete confirm
+  // Delete request state
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [deleteSuccess, setDeleteSuccess] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+
+  // Fetch pending delete requests on mount
+  useEffect(() => {
+    fetch("/api/delete-requests?status=pending")
+      .then((r) => r.json())
+      .then((data: any[]) => {
+        if (Array.isArray(data)) {
+          const ids = new Set<string>(data.filter((d) => d.targetModel === "Product").map((d) => d.targetId));
+          setPendingDeleteIds(ids);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Filtered list
   const filtered = useMemo(() => {
@@ -181,25 +199,33 @@ export default function ProductsClient({
     }
   };
 
-  // ── Soft delete
-  const handleDelete = async () => {
+  // ── Submit delete request
+  const handleDeleteRequest = async () => {
     if (!deleteTarget) return;
-    setDeleting(true);
+    setDeleteSubmitting(true);
+    setDeleteError("");
     try {
-      const res = await fetch(`/api/products/${deleteTarget.id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || "Gagal menghapus.");
-      }
-      setProducts((prev) => prev.filter((p) => p.id !== deleteTarget.id));
-      setDeleteTarget(null);
-      startTransition(() => router.refresh());
+      const res = await fetch("/api/delete-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetModel: "Product",
+          targetId: deleteTarget.id,
+          targetLabel: `${deleteTarget.productCode} — ${deleteTarget.productName}`,
+          reason: deleteReason.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to submit request.");
+      setPendingDeleteIds((prev) => new Set([...prev, deleteTarget.id]));
+      setDeleteSuccess(true);
     } catch (err: any) {
-      alert(err.message);
+      setDeleteError(err.message);
     } finally {
-      setDeleting(false);
+      setDeleteSubmitting(false);
     }
   };
+
 
   // ── Form field helper
   const setField = (key: keyof FormState, value: string) =>
@@ -327,20 +353,22 @@ export default function ProductsClient({
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-2">
                       <button
                         onClick={() => openEdit(p)}
                         title="Edit product"
-                        className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors border border-primary/10"
                       >
                         <Pencil className="w-3.5 h-3.5" />
+                        Edit
                       </button>
                       <button
                         onClick={() => setDeleteTarget(p)}
-                        title="Nonaktifkan produk"
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Request Deletion"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
+                        Pengajuan Delete
                       </button>
                     </div>
                   </td>
@@ -603,48 +631,86 @@ export default function ProductsClient({
         </div>
       )}
 
-      {/* ── Delete Confirm Modal ─────────────────────────────────────────────── */}
+      {/* ── Delete Request Modal ─────────────────────────────────────────────── */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
-            onClick={() => { if (!deleting) setDeleteTarget(null); }}
+            onClick={() => { if (!deleteSubmitting) setDeleteTarget(null); }}
           />
           <div className="relative z-10 w-full max-w-sm mx-4 bg-white rounded-3xl shadow-2xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
-                <Trash2 className="w-5 h-5 text-red-500" />
+            {deleteSuccess ? (
+              <div className="flex flex-col items-center gap-4 text-center py-6">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Request Submitted!</h3>
+                <p className="text-slate-500 text-sm">Your deletion request has been sent to the Owner for review.</p>
+                <button
+                  onClick={() => { setDeleteTarget(null); setDeleteSuccess(false); setDeleteReason(""); }}
+                  className="mt-2 px-6 py-2.5 bg-primary text-white rounded-xl font-semibold"
+                >
+                  Close
+                </button>
               </div>
-              <div>
-                <h3 className="font-bold text-slate-800">Nonaktifkan Produk</h3>
-                <p className="text-xs text-slate-500">Produk tidak akan muncul di dropdown GRN</p>
-              </div>
-            </div>
-            <div className="bg-slate-50 rounded-xl p-3 mb-5">
-              <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-0.5">Produk</p>
-              <p className="font-mono text-sm font-bold text-slate-700">{deleteTarget.productCode}</p>
-              <p className="text-sm text-slate-600">{deleteTarget.productName}</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-                className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
-              >
-                Batal
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70"
-              >
-                {deleting ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Menghapus…</>
-                ) : (
-                  "Ya, Nonaktifkan"
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center shrink-0">
+                    <Trash2 className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800">Request Product Deletion</h3>
+                    <p className="text-xs text-slate-500">Submit request to Owner for approval</p>
+                  </div>
+                </div>
+                <div className="bg-slate-50 rounded-xl p-3 mb-4">
+                  <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-0.5">Product</p>
+                  <p className="font-mono text-sm font-bold text-slate-700">{deleteTarget.productCode}</p>
+                  <p className="text-sm text-slate-600">{deleteTarget.productName}</p>
+                </div>
+                <div className="mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-yellow-700 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>This request will be reviewed by the <strong>super admin (Owner)</strong> before the product is deactivated.</span>
+                </div>
+                {deleteError && (
+                  <div className="mb-4 flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {deleteError}
+                  </div>
                 )}
-              </button>
-            </div>
+                <div className="mb-4">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Reason (optional)</label>
+                  <textarea
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    rows={2}
+                    placeholder="Explain why this product should be deleted..."
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { if (!deleteSubmitting) setDeleteTarget(null); }}
+                    disabled={deleteSubmitting}
+                    className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleDeleteRequest}
+                    disabled={deleteSubmitting}
+                    className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                  >
+                    {deleteSubmitting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Submitting…</>
+                    ) : (
+                      <><MessageSquare className="w-4 h-4" /> Submit Request</>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -4,9 +4,16 @@ import InboundClient from "./InboundClient";
 export const dynamic = "force-dynamic";
 
 export default async function InboundPage() {
-  const [receipts, customers, checkers, products, racks] = await Promise.all([
+  const [rawReceipts, customers, checkers, products, racks] = await Promise.all([
     prisma.inboundReceipt.findMany({
-      include: { customer: true, checker: true, packingList: true },
+      include: { 
+        customer: true, 
+        checker: true, 
+        packingList: true,
+        stockLedgers: {
+          select: { quantity: true }
+        }
+      },
       orderBy: { createdAt: "desc" },
     }),
     prisma.customer.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
@@ -25,6 +32,33 @@ export default async function InboundPage() {
       orderBy: { rackCode: "asc" },
     }),
   ]);
+
+  const receipts = rawReceipts.map(receipt => {
+    let calculatedStatus = receipt.status;
+    let currentQty = receipt.totalPcsReceived;
+    let outboundedQty = 0;
+
+    if (receipt.stockLedgers.length > 0) {
+      currentQty = receipt.stockLedgers.reduce((sum, sl) => sum + sl.quantity, 0);
+      outboundedQty = Math.max(0, receipt.totalPcsReceived - currentQty);
+
+      // Check if the GRN is currently considered "inbound" / in progress
+      if (receipt.status === "in_progress" || receipt.status === "completed") {
+        // If all items from this GRN have left the warehouse
+        if (currentQty === 0) {
+          calculatedStatus = "outbounded";
+        } else if (outboundedQty > 0) {
+          calculatedStatus = "partially_outbounded";
+        }
+      }
+    }
+
+    return {
+      ...receipt,
+      status: calculatedStatus,
+      outboundedQty,
+    };
+  });
 
   return (
     <div className="space-y-6">

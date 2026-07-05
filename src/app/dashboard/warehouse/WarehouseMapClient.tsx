@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo } from "lucide-react";
+import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2 } from "lucide-react";
 
 interface WarehouseMapClientProps {
   initialRacks: any[];
@@ -210,60 +210,60 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   const RACK_CELLS = useMemo(() => {
     const cells = [];
 
-    // Row A: 18 cells, x = 0.3m. Spans y = 6.0 to 24.0
-    for (let r = 1; r <= 18; r++) {
+    // Row A: 14 cells, x = 2.75m. Spans y = 6.0 to 20.0
+    for (let r = 1; r <= 14; r++) {
       cells.push({
         rackCode: "A",
         rowNumber: r,
-        x: 0.3,
+        x: 2.75,
         y: 6.0 + (r - 1) * 1.0,
         w: 1.2,
         h: 1.0
       });
     }
 
-    // Row B: 16 cells, x = 4.25m. Spans y = 6.0 to 22.0
-    for (let r = 1; r <= 16; r++) {
+    // Row B: 14 cells, x = 3.95m. Spans y = 6.0 to 20.0
+    for (let r = 1; r <= 14; r++) {
       cells.push({
         rackCode: "B",
         rowNumber: r,
-        x: 4.25,
+        x: 3.95,
         y: 6.0 + (r - 1) * 1.0,
         w: 1.2,
         h: 1.0
       });
     }
 
-    // Row C: 16 cells, x = 5.45m (touching B). Spans y = 6.0 to 22.0
-    for (let r = 1; r <= 16; r++) {
+    // Row C: 14 cells, x = 7.9m. Spans y = 6.0 to 20.0
+    for (let r = 1; r <= 14; r++) {
       cells.push({
         rackCode: "C",
         rowNumber: r,
-        x: 5.45,
+        x: 7.9,
         y: 6.0 + (r - 1) * 1.0,
         w: 1.2,
         h: 1.0
       });
     }
 
-    // Row D: 15 cells, x = 9.4m. Spans y = 6.0 to 21.0
-    for (let r = 1; r <= 15; r++) {
+    // Row D: 14 cells, x = 9.1m. Spans y = 6.0 to 20.0
+    for (let r = 1; r <= 14; r++) {
       cells.push({
         rackCode: "D",
         rowNumber: r,
-        x: 9.4,
+        x: 9.1,
         y: 6.0 + (r - 1) * 1.0,
         w: 1.2,
         h: 1.0
       });
     }
 
-    // Row E: 15 cells, x = 10.6m (touching D). Spans y = 6.0 to 21.0
-    for (let r = 1; r <= 15; r++) {
+    // Row E: 18 cells, x = 13.05m. Spans y = 6.0 to 24.0
+    for (let r = 1; r <= 18; r++) {
       cells.push({
         rackCode: "E",
         rowNumber: r,
-        x: 10.6,
+        x: 13.05,
         y: 6.0 + (r - 1) * 1.0,
         w: 1.2,
         h: 1.0
@@ -467,7 +467,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
         <div className="map-container relative w-full overflow-visible max-w-[550px]">
           
           <svg 
-            viewBox="-1.5 -1.0 17.5 29.5" 
+            viewBox="-1.5 -1.0 17.5 28.5" 
             className="w-full h-auto drop-shadow-sm" 
             style={{ shapeRendering: "geometricPrecision" }}
           >
@@ -485,30 +485,33 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
               <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
                 <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#94a3b8" />
               </marker>
+              <marker id="thick-arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#000000" />
+              </marker>
             </defs>
 
             {/* Subtle Grid Background */}
-            <rect x="-1.5" y="-1.0" width="17.5" height="29.5" fill="url(#grid)" />
+            <rect x="-1.5" y="-1.0" width="17.5" height="28.5" fill="url(#grid)" />
 
             {/* 1. Structural Columns (Dashed Lines) */}
             {/* Verticals every 3.625m */}
-            <line x1="3.625" y1="0" x2="3.625" y2="27" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
-            <line x1="7.25" y1="0" x2="7.25" y2="27" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
-            <line x1="10.875" y1="0" x2="10.875" y2="27" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
+            <line x1="3.625" y1="0" x2="3.625" y2="25.5" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
+            <line x1="7.25" y1="0" x2="7.25" y2="25.5" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
+            <line x1="10.875" y1="0" x2="10.875" y2="25.5" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
             
             {/* Horizontals */}
             <line x1="0" y1="3.0" x2="14.5" y2="3.0" stroke="#e2e8f0" strokeWidth="0.04" strokeDasharray="0.1 0.1" />
             <line x1="0" y1="6.0" x2="14.5" y2="6.0" stroke="#94a3b8" strokeWidth="0.06" strokeDasharray="0.15 0.15" />
-            <line x1="0" y1="24.0" x2="14.5" y2="24.0" stroke="#94a3b8" strokeWidth="0.06" strokeDasharray="0.15 0.15" />
+            <line x1="3.0" y1="22.5" x2="14.5" y2="22.5" stroke="#94a3b8" strokeWidth="0.06" strokeDasharray="0.15 0.15" />
 
             {/* 2. Warehouse Concrete Outer Walls */}
-            <rect x="0" y="0" width="14.5" height="27.0" fill="none" stroke="#475569" strokeWidth="0.12" rx="0.1" />
+            <rect x="0" y="0" width="14.5" height="25.5" fill="none" stroke="#475569" strokeWidth="0.12" rx="0.1" />
 
             {/* 3. Restruck Charging Station */}
-            <rect x="11.5" y="24.0" width="3.0" height="3.0" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="0.07" strokeDasharray="0.1 0.1" rx="0.15" />
-            <text x="13.0" y="25.2" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">Restruck</text>
-            <text x="13.0" y="25.65" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">charging</text>
-            <text x="13.0" y="26.1" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">station</text>
+            <rect x="0" y="22.5" width="3.0" height="3.0" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="0.07" strokeDasharray="0.1 0.1" rx="0.15" />
+            <text x="1.5" y="23.3" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">Restruck</text>
+            <text x="1.5" y="23.8" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">charging</text>
+            <text x="1.5" y="24.8" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">station</text>
 
             {/* 4. Render Red Floor Storage Cells (32 cells) */}
             {FLOOR_CELLS.map((cell) => {
@@ -574,24 +577,19 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
             })}
 
             {/* 6. Rack Row Labels (Matching drawing layout) */}
-            {/* Label A */}
-            <text x="0.9" y="26.0" textAnchor="middle" fontSize="0.7" fontWeight="bold" fill="#1e293b">A</text>
-            
-            {/* Labels B & C */}
-            <text x="4.85" y="23.2" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">B</text>
-            <text x="6.05" y="23.2" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">C</text>
-
-            {/* Labels D & E */}
-            <text x="10.0" y="22.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">D</text>
-            <text x="11.2" y="22.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">E</text>
+            <text x="3.35" y="20.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">A</text>
+            <text x="4.55" y="20.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">B</text>
+            <text x="8.50" y="21.6" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">C</text>
+            <text x="9.70" y="21.6" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">D</text>
+            <text x="13.65" y="25.1" textAnchor="middle" fontSize="0.8" fontWeight="bold" fill="#000000">E</text>
 
             {/* 7. CAD Dimension Lines & Arrows */}
             {/* Total Width Arrow (14.5m) */}
-            <line x1="0" y1="27.8" x2="14.5" y2="27.8" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <line x1="0" y1="27.0" x2="0" y2="28.2" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
-            <line x1="14.5" y1="27.0" x2="14.5" y2="28.2" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
-            <rect x="6.3" y="27.4" width="1.9" height="0.8" fill="#ffffff" rx="0.1" />
-            <text x="7.25" y="27.95" textAnchor="middle" fontSize="0.45" fontWeight="bold" fill="#64748b">14,5m</text>
+            <line x1="0" y1="27.0" x2="14.5" y2="27.0" stroke="#000000" strokeWidth="0.08" strokeDasharray="0.15 0.15" markerStart="url(#thick-arrow)" markerEnd="url(#thick-arrow)" />
+            <line x1="0" y1="25.5" x2="0" y2="27.5" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <line x1="14.5" y1="25.5" x2="14.5" y2="27.5" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="6.3" y="26.6" width="1.9" height="0.8" fill="#ffffff" rx="0.1" />
+            <text x="7.25" y="27.2" textAnchor="middle" fontSize="0.45" fontWeight="bold" fill="#000000">14,5m</text>
 
             {/* Column Spacing Arrow (3.625m) */}
             <line x1="0" y1="-0.4" x2="3.625" y2="-0.4" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
@@ -606,41 +604,43 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
             <text x="-0.8" y="3.1" textAnchor="middle" fontSize="0.45" transform="rotate(-90 -0.8 3.0)" fontWeight="bold" fill="#64748b">6m</text>
 
             {/* Middle Section Height Arrow (18m) */}
-            <line x1="15.3" y1="6.0" x2="15.3" y2="24.0" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <line x1="14.4" y1="24.0" x2="15.6" y2="24.0" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
-            <rect x="14.9" y="14.2" width="0.8" height="1.6" fill="#ffffff" rx="0.1" />
-            <text x="15.3" y="15.2" textAnchor="middle" fontSize="0.45" transform="rotate(90 15.3 15.0)" fontWeight="bold" fill="#64748b">18m</text>
+            <line x1="15.3" y1="6.0" x2="15.3" y2="25.5" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <line x1="14.4" y1="25.5" x2="15.6" y2="25.5" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="14.9" y="15.0" width="0.8" height="1.6" fill="#ffffff" rx="0.1" />
+            <text x="15.3" y="16.0" textAnchor="middle" fontSize="0.45" transform="rotate(90 15.3 15.8)" fontWeight="bold" fill="#64748b">18m</text>
 
             {/* Bottom Section Height Arrow (3m) */}
-            <line x1="-0.8" y1="24.0" x2="-0.8" y2="27.0" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <line x1="-1.1" y1="27.0" x2="0.1" y2="27.0" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
-            <rect x="-1.2" y="25.0" width="0.8" height="1.0" fill="#ffffff" rx="0.1" />
-            <text x="-0.8" y="25.6" textAnchor="middle" fontSize="0.4" transform="rotate(-90 -0.8 25.5)" fontWeight="bold" fill="#64748b">3m</text>
+            <line x1="-0.8" y1="22.5" x2="-0.8" y2="25.5" stroke="#94a3b8" strokeWidth="0.05" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <line x1="-1.1" y1="25.5" x2="0.1" y2="25.5" stroke="#cbd5e1" strokeWidth="0.04" strokeDasharray="0.08 0.08" />
+            <rect x="-1.2" y="23.5" width="0.8" height="1.0" fill="#ffffff" rx="0.1" />
+            <text x="-0.8" y="24.1" textAnchor="middle" fontSize="0.4" transform="rotate(-90 -0.8 24.0)" fontWeight="bold" fill="#64748b">3m</text>
 
             {/* Aisle Dimension Arrows */}
-            {/* A-B (2.75m) */}
-            <line x1="1.5" y1="8.0" x2="4.25" y2="8.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <text x="2.875" y="7.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
+            {/* A-Wall (2.75m) */}
+            <line x1="0" y1="12.0" x2="2.75" y2="12.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="1.375" y="11.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
 
-            {/* C-D (2.75m) */}
-            <line x1="6.65" y1="8.0" x2="9.4" y2="8.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <text x="8.025" y="7.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
+            {/* B-C (2.75m) */}
+            <line x1="5.15" y1="12.0" x2="7.9" y2="12.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="6.525" y="11.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
 
-            {/* E-Wall (2.75m) */}
-            <line x1="11.8" y1="8.0" x2="14.5" y2="8.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <text x="13.15" y="7.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
+            {/* D-E (2.75m) */}
+            <line x1="10.3" y1="12.0" x2="13.05" y2="12.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <text x="11.675" y="11.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
 
-            {/* Cell Size indicator (E15 cell) */}
-            {/* Width 1.2m */}
-            <line x1="10.6" y1="21.4" x2="11.8" y2="21.4" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <text x="11.2" y="21.8" textAnchor="middle" fontSize="0.28" fontWeight="bold" fill="#64748b">1,2m</text>
-            {/* Height 1.0m */}
-            <line x1="12.1" y1="20.0" x2="12.1" y2="21.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <text x="12.5" y="20.5" textAnchor="middle" fontSize="0.28" transform="rotate(-90 12.5 20.5)" fontWeight="bold" fill="#64748b">1m</text>
+            {/* Cell Size indicator (Annotating cell C14) */}
+            {/* Height 1.0m (left of C14) */}
+            <line x1="7.5" y1="19.0" x2="7.5" y2="20.0" stroke="#000000" strokeWidth="0.08" strokeDasharray="0.15 0.15" markerStart="url(#thick-arrow)" markerEnd="url(#thick-arrow)" />
+            <text x="7.1" y="19.5" textAnchor="middle" fontSize="0.45" transform="rotate(-90 7.1 19.5)" fill="#000000">1m</text>
+            
+            {/* Width 1.2m (under C14) */}
+            <line x1="7.9" y1="20.4" x2="9.1" y2="20.4" stroke="#000000" strokeWidth="0.08" strokeDasharray="0.15 0.15" markerStart="url(#thick-arrow)" markerEnd="url(#thick-arrow)" />
+            <text x="8.5" y="20.9" textAnchor="middle" fontSize="0.45" fill="#000000">1,2m</text>
 
             {/* Charging Station width indicator */}
-            <line x1="11.5" y1="27.4" x2="14.5" y2="27.4" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
-            <text x="13.0" y="27.7" textAnchor="middle" fontSize="0.3" fontWeight="bold" fill="#64748b">3m</text>
+            <line x1="0" y1="24.3" x2="3.0" y2="24.3" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
+            <rect x="1.1" y="24.0" width="0.8" height="0.4" fill="#f8fafc" />
+            <text x="1.5" y="24.4" textAnchor="middle" fontSize="0.3" fontWeight="bold" fill="#64748b">3m</text>
           </svg>
 
           {/* ─── LIVE FLOATING HOVER CARD ──────────────────────────── */}
@@ -705,62 +705,58 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
           
           <div className="space-y-2.5">
-            <h5 className="font-bold text-slate-700 border-b pb-1">Rack Setup Details</h5>
+            <h5 className="font-bold text-slate-700 border-b pb-1">Description</h5>
             <ul className="space-y-1.5 text-xs font-medium text-slate-600">
-              <li className="flex justify-between">
-                <span>Row A (18 racks x 4 levels):</span>
-                <span className="font-bold text-slate-800">72 PP</span>
+              <li className="flex flex-col">
+                <span className="font-semibold">• 1 Green colour equivalent to :</span>
+                <span className="pl-3">4 Layer rack (Row A,B,C,D,E)</span>
+                <span className="pl-3">(Row E = 72PP),</span>
+                <span className="pl-3">(Row C dan D = 112PP),</span>
+                <span className="pl-3">(Row A dan B = 112PP)</span>
               </li>
-              <li className="flex justify-between">
-                <span>Row B & C (32 racks x 4 levels):</span>
-                <span className="font-bold text-slate-800">128 PP</span>
-              </li>
-              <li className="flex justify-between">
-                <span>Row D & E (30 racks x 4 levels):</span>
-                <span className="font-bold text-slate-800">120 PP</span>
-              </li>
-              <li className="flex justify-between border-t pt-1.5">
-                <span className="font-semibold">Total Green Rack Space:</span>
-                <span className="font-bold text-slate-800">320 PP</span>
+              <li className="flex justify-between mt-2">
+                <span className="font-semibold">• 1 Red colour equivalent to :</span>
+                <span className="text-slate-800">1 Layer rack</span>
               </li>
             </ul>
           </div>
 
           <div className="space-y-2.5">
-            <h5 className="font-bold text-slate-700 border-b pb-1">Floor Storage Details</h5>
+            <h5 className="font-bold text-slate-700 border-b pb-1">Total pallet position</h5>
             <ul className="space-y-1.5 text-xs font-medium text-slate-600">
               <li className="flex justify-between">
-                <span>Floor Space (1 level):</span>
-                <span className="font-bold text-slate-800">32 PP</span>
+                <span className="font-semibold">• Green colour :</span>
+                <span className="font-bold text-slate-800">72 x 4 = 288 PP</span>
               </li>
               <li className="flex justify-between">
-                <span>Floor Cell Equivalent:</span>
-                <span className="text-slate-500 italic">1 Layer Rack</span>
-              </li>
-              <li className="flex justify-between border-t pt-1.5">
-                <span className="font-semibold">Total Floor Space:</span>
+                <span className="font-semibold">• Red colour :</span>
                 <span className="font-bold text-slate-800">32 PP</span>
+              </li>
+              <li className="flex justify-between border-t pt-1.5 mt-2">
+                <span className="font-bold text-slate-800">• Total =</span>
+                <span className="font-bold text-slate-800">352 PP</span>
               </li>
             </ul>
           </div>
 
           <div className="space-y-2.5">
-            <h5 className="font-bold text-slate-700 border-b pb-1">Pallet Specifications</h5>
+            <h5 className="font-bold text-slate-700 border-b pb-1">Pallet position Details</h5>
             <ul className="space-y-1.5 text-xs font-medium text-slate-600">
               <li className="flex justify-between">
-                <span>Standard Dimensions:</span>
-                <span className="font-semibold text-slate-800">1.2m (W) x 1.0m (L) x 1.0m (H)</span>
+                <span className="font-semibold">• Length :</span>
+                <span className="font-semibold text-slate-800">1m</span>
               </li>
               <li className="flex justify-between">
-                <span>Load Weight Capacity:</span>
-                <span className="font-semibold text-slate-800">480 - 700 Kg</span>
+                <span className="font-semibold">• Width :</span>
+                <span className="font-semibold text-slate-800">1,2m</span>
               </li>
-              <li className="flex justify-between border-t pt-1.5">
-                <span className="font-semibold text-slate-800 flex items-center gap-1">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />
-                  Total Capacity:
-                </span>
-                <span className="font-bold text-indigo-600">352 Pallet Positions</span>
+              <li className="flex justify-between">
+                <span className="font-semibold">• Height :</span>
+                <span className="font-semibold text-slate-800">1m</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="font-semibold">• Weight :</span>
+                <span className="font-semibold text-slate-800">480-700Kg</span>
               </li>
             </ul>
           </div>

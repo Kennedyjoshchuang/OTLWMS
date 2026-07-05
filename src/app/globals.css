@@ -1,10 +1,10 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #10b981;
-  --color-primary-focus: #059669;
+  --color-primary: #059669; /* Emerald 600 */
+  --color-primary-focus: #047857; /* Emerald 700 */
   --color-secondary: #0f172a;
-  --color-accent: #3b82f6;
+  --color-accent: #d4af37; /* Metallic Gold */
 }
 
 @layer base {
@@ -18,7 +18,7 @@
     --popover: #ffffff;
     --popover-foreground: #0f172a;
  
-    --primary: #10b981;
+    --primary: #059669;
     --primary-foreground: #ffffff;
  
     --secondary: #f1f5f9;
@@ -27,7 +27,7 @@
     --muted: #f1f5f9;
     --muted-foreground: #64748b;
  
-    --accent: #3b82f6;
+    --accent: #d4af37;
     --accent-foreground: #ffffff;
  
     --destructive: #ef4444;
@@ -35,7 +35,7 @@
 
     --border: #e2e8f0;
     --input: #e2e8f0;
-    --ring: #10b981;
+    --ring: #d4af37;
  
     --radius: 0.75rem;
   }
@@ -50,7 +50,7 @@
     --popover: #18181b;
     --popover-foreground: #f8fafc;
  
-    --primary: #10b981;
+    --primary: #059669;
     --primary-foreground: #ffffff;
  
     --secondary: #27272a;
@@ -59,15 +59,15 @@
     --muted: #27272a;
     --muted-foreground: #a1a1aa;
  
-    --accent: #3b82f6;
-    --accent-foreground: #ffffff;
+    --accent: #d4af37;
+    --accent-foreground: #18181b;
  
     --destructive: #ef4444;
     --destructive-foreground: #f8fafc;
  
     --border: #27272a;
     --input: #27272a;
-    --ring: #10b981;
+    --ring: #d4af37;
   }
 }
 
@@ -77,6 +77,10 @@
   }
   body {
     @apply bg-[var(--background)] text-[var(--foreground)] antialiased min-h-screen font-sans;
+  }
+  button {
+    @apply outline-none;
+    border: none;
   }
 }
 

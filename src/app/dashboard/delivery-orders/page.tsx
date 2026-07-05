@@ -10,6 +10,9 @@ export default async function DeliveryOrdersPage() {
       picker: true,
       driver: true,
       pickingItems: true,
+      deliveryTicket: {
+        include: { items: true },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -18,7 +21,7 @@ export default async function DeliveryOrdersPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Delivery Orders</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Outbound</h1>
           <p className="text-slate-500 mt-1">Manage outbound delivery orders and picking tasks.</p>
         </div>
       </div>

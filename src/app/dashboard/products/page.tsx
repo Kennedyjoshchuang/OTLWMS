@@ -29,7 +29,7 @@ export default async function ProductsPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        <ProductsClient initialProducts={products} customers={customers} />
+        <ProductsClient initialProducts={JSON.parse(JSON.stringify(products))} customers={customers} />
       </div>
     </div>
   );

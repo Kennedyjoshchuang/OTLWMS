@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Package, Lock, Mail, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
@@ -42,10 +43,12 @@ export default function LoginPage() {
       
       <div className="relative z-10 w-full max-w-md p-8 glass-panel rounded-3xl mx-4 animate-in">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 mb-4">
-            <Package className="w-8 h-8 text-white" />
+          <div className="flex items-center justify-center gap-6 mb-5">
+            <Image src="/logo.png" alt="Omega Logo" width={90} height={90} className="drop-shadow-xl object-contain" />
+            <div className="w-[2px] h-16 bg-slate-700/50" />
+            <Image src="/jotun-logo.png" alt="Jotun Logo" width={140} height={80} className="drop-shadow-xl object-contain" />
           </div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">Omega Trust</h1>
+          <h1 className="text-3xl font-bold text-white tracking-tight text-center leading-tight">Jotun Bali<br />Warehouse Management System</h1>
           <p className="text-slate-300 mt-2 font-medium">Logistics WMS Portal</p>
         </div>
 

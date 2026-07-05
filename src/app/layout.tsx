@@ -6,7 +6,7 @@ import AuthProvider from "@/components/providers/AuthProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Omega Trust Logistik WMS",
+  title: "Jotun Bali Warehouse Management System",
   description: "Warehouse Management System for 3PL",
 };
 
