@@ -1,0 +1,13 @@
+SELECT 'User' as tbl, COUNT(*) as cnt FROM "User"
+UNION ALL SELECT 'Customer', COUNT(*) FROM "Customer"
+UNION ALL SELECT 'Product', COUNT(*) FROM "Product"
+UNION ALL SELECT 'PackingList', COUNT(*) FROM "PackingList"
+UNION ALL SELECT 'InboundReceipt', COUNT(*) FROM "InboundReceipt"
+UNION ALL SELECT 'StockLedger', COUNT(*) FROM "StockLedger"
+UNION ALL SELECT 'DeliveryTicket', COUNT(*) FROM "DeliveryTicket"
+UNION ALL SELECT 'DeliveryOrder', COUNT(*) FROM "DeliveryOrder"
+UNION ALL SELECT 'DOPickingItem', COUNT(*) FROM "DOPickingItem"
+UNION ALL SELECT 'Invoice', COUNT(*) FROM "Invoice"
+UNION ALL SELECT 'PricingRate', COUNT(*) FROM "PricingRate"
+UNION ALL SELECT 'WarehouseRack', COUNT(*) FROM "WarehouseRack"
+UNION ALL SELECT 'PalletPosition', COUNT(*) FROM "PalletPosition";

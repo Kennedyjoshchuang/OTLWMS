@@ -4,7 +4,7 @@ import InboundClient from "./InboundClient";
 export const dynamic = "force-dynamic";
 
 export default async function InboundPage() {
-  const [rawReceipts, customers, checkers, products, racks] = await Promise.all([
+  const [rawReceipts, customers, checkers, products, racks, deletedRequests] = await Promise.all([
     prisma.inboundReceipt.findMany({
       include: { 
         customer: true, 
@@ -30,6 +30,11 @@ export default async function InboundPage() {
     prisma.warehouseRack.findMany({
       include: { positions: true },
       orderBy: { rackCode: "asc" },
+    }),
+    (prisma as any).deleteRequest.findMany({
+      where: { targetModel: "InboundReceipt", status: "deleted" },
+      include: { requestedBy: { select: { fullName: true } } },
+      orderBy: { updatedAt: "desc" },
     }),
   ]);
 
@@ -57,8 +62,29 @@ export default async function InboundPage() {
       ...receipt,
       status: calculatedStatus,
       outboundedQty,
+      isDeleted: false,
     };
   });
+
+  // Create ghost rows for hard-deleted GRNs that have an approved delete request
+  const ghostRows = deletedRequests.map((dr: any) => ({
+    id: dr.id,
+    receiptNumber: dr.targetLabel,
+    customer: null,
+    checker: null,
+    receivedDate: dr.updatedAt,
+    totalPcsReceived: 0,
+    totalLiterReceived: 0,
+    status: "deleted",
+    outboundedQty: 0,
+    isDeleted: true,
+    deletedAt: dr.updatedAt,
+    deletedReason: dr.reviewNote || dr.reason || null,
+    requestedBy: dr.requestedBy?.fullName || null,
+  }));
+
+  // Merge: real receipts first, then ghost deleted rows
+  const allReceipts = [...receipts, ...ghostRows];
 
   return (
     <div className="space-y-6">
@@ -71,7 +97,7 @@ export default async function InboundPage() {
 
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
         <InboundClient
-          initialReceipts={receipts}
+          initialReceipts={allReceipts}
           customers={customers}
           checkers={checkers}
           products={products}

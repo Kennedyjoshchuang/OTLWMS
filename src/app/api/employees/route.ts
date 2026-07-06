@@ -2,23 +2,44 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
+// Auto-generate a unique email from fullName + role
+async function generateEmail(fullName: string, role: string): Promise<string> {
+  const slug = fullName
+    .toLowerCase()
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9.]/g, "");
+  const domain = "omegaTrust.id";
+  const base = `${slug}@${domain}`;
+
+  // Check uniqueness; append a counter if needed
+  let candidate = base;
+  let counter = 1;
+  while (await prisma.user.findUnique({ where: { email: candidate } })) {
+    candidate = `${slug}${counter}@${domain}`;
+    counter++;
+  }
+  return candidate;
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { fullName, email, password, role, phone } = await req.json();
+    const { fullName, password, role, phone } = await req.json();
 
-    if (!fullName || !email || !password || !role) {
-      return NextResponse.json({ error: "fullName, email, password, and role are required." }, { status: 400 });
+    if (!fullName || !password || !role) {
+      return NextResponse.json({ error: "fullName, password, and role are required." }, { status: 400 });
     }
 
-    const validRoles = ["super_admin", "warehouse_admin", "checker_inbound", "picker", "driver", "customer_viewer"];
+    const validRoles = [
+      "super_admin", "warehouse_admin", "checker_inbound", "picker", "driver", "customer_viewer",
+      "inbound_staff", "outbound_staff", "picklist_staff", "delivery_staff",
+      "hr_staff", "product_staff", "billing_staff", "report_staff", "warehouse_staff",
+    ];
     if (!validRoles.includes(role)) {
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });
     }
 
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      return NextResponse.json({ error: "Email sudah terdaftar di sistem." }, { status: 409 });
-    }
+    // Auto-generate email
+    const email = await generateEmail(fullName, role);
 
     const passwordHash = await bcrypt.hash(password, 12);
 

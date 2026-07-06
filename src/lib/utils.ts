@@ -61,6 +61,7 @@ export const STATUS_COLOR: Record<string, string> = {
   cancelled: 'bg-red-600',
   excess: 'bg-orange-400',
   shortage: 'bg-red-400',
+  deleted: 'bg-red-700',
 }
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -86,13 +87,23 @@ export const STATUS_LABEL: Record<string, string> = {
   cancelled: 'Cancelled',
   excess: 'Excess',
   shortage: 'Shortage',
+  deleted: 'Deleted',
 }
 
 export const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Super Admin',
+  super_admin: 'Owner / Super Admin',
   warehouse_admin: 'Warehouse Admin',
   checker_inbound: 'Checker Inbound',
   picker: 'Picker',
   driver: 'Driver',
   customer_viewer: 'Customer Viewer',
+  inbound_staff: 'Inbound (GRN)',
+  outbound_staff: 'Outbound',
+  picklist_staff: 'Pick Lists',
+  delivery_staff: 'Deliveries',
+  hr_staff: 'Employees',
+  product_staff: 'Products',
+  billing_staff: 'Billing & Invoices',
+  report_staff: 'Reports',
+  warehouse_staff: 'Warehouse Map',
 }

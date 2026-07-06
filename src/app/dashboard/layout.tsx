@@ -35,16 +35,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const role = (session.user as any)?.role;
 
   const navItems = [
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["super_admin", "warehouse_admin", "customer_viewer"] },
-    { name: "Inbound (GRN)", href: "/dashboard/inbound", icon: Inbox, roles: ["super_admin", "warehouse_admin", "checker_inbound"] },
-    { name: "Products", href: "/dashboard/products", icon: Box, roles: ["super_admin", "warehouse_admin"] },
-    { name: "Warehouse Map", href: "/dashboard/warehouse", icon: Map, roles: ["super_admin", "warehouse_admin", "checker_inbound", "picker"] },
-    { name: "Pick Lists", href: "/dashboard/delivery-tickets", icon: FileText, roles: ["super_admin", "warehouse_admin"] },
-    { name: "Billing & Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["super_admin", "warehouse_admin", "customer_viewer"] },
-    { name: "Outbound", href: "/dashboard/delivery-orders", icon: Package, roles: ["super_admin", "warehouse_admin", "picker"] },
-    { name: "Deliveries", href: "/dashboard/deliveries", icon: Truck, roles: ["super_admin", "warehouse_admin", "driver"] },
-    { name: "Employees", href: "/dashboard/employees", icon: Users, roles: ["super_admin", "warehouse_admin"] },
-    { name: "Reports", href: "/dashboard/reports", icon: FileText, roles: ["super_admin", "warehouse_admin", "customer_viewer"] },
+    { name: "Inbound (GRN)", href: "/dashboard/inbound", icon: Inbox, roles: ["super_admin", "warehouse_admin", "checker_inbound", "inbound_staff"] },
+    { name: "Products", href: "/dashboard/products", icon: Box, roles: ["super_admin", "warehouse_admin", "product_staff"] },
+    { name: "Warehouse Map", href: "/dashboard/warehouse", icon: Map, roles: ["super_admin", "warehouse_admin", "checker_inbound", "picker", "warehouse_staff"] },
+    { name: "Pick Lists", href: "/dashboard/delivery-tickets", icon: FileText, roles: ["super_admin", "warehouse_admin", "picker", "picklist_staff"] },
+    { name: "Billing & Invoices", href: "/dashboard/invoices", icon: Receipt, roles: ["super_admin", "warehouse_admin", "customer_viewer", "billing_staff"] },
+    { name: "Outbound", href: "/dashboard/delivery-orders", icon: Package, roles: ["super_admin", "warehouse_admin", "picker", "outbound_staff"] },
+    { name: "Deliveries", href: "/dashboard/deliveries", icon: Truck, roles: ["super_admin", "warehouse_admin", "driver", "delivery_staff"] },
+    { name: "Employees", href: "/dashboard/employees", icon: Users, roles: ["super_admin", "warehouse_admin", "hr_staff"] },
+    { name: "Reports", href: "/dashboard/reports", icon: FileText, roles: ["super_admin", "warehouse_admin", "customer_viewer", "report_staff"] },
     { name: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["super_admin"] },
     { name: "Owner Page", href: "/dashboard/delete-requests", icon: ShieldCheck, roles: ["super_admin"] },
   ];
@@ -77,6 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               const active = pathname === item.href || pathname.startsWith(item.href + '/');
               return (
                 <Link key={item.name} href={item.href}
+                  onClick={() => setSidebarOpen(false)}
                   className={`flex items-center px-3 py-2.5 rounded-xl transition-colors ${
                     active 
                       ? "bg-primary text-white font-medium shadow-md shadow-primary/20" 

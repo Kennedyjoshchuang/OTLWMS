@@ -52,11 +52,16 @@ export async function PATCH(
         select: { id: true, palletPositionId: true },
       });
 
-      // 2. Delete stock ledger entries
       if (ledgers.length > 0) {
+        const ledgerIds = ledgers.map((l) => l.id);
+
+        // 2. Delete DOPickingItems that reference these stock ledgers (FK constraint)
+        await prisma.dOPickingItem.deleteMany({ where: { stockLedgerId: { in: ledgerIds } } });
+
+        // 3. Delete stock ledger entries
         await prisma.stockLedger.deleteMany({ where: { inboundReceiptId: targetId } });
 
-        // 3. Re-check each affected pallet position — if no more stock, mark as not occupied
+        // 4. Re-check each affected pallet position — if no more stock, mark as not occupied
         const affectedPositions = [...new Set(ledgers.map((l) => l.palletPositionId))];
         for (const posId of affectedPositions) {
           const remaining = await prisma.stockLedger.count({ where: { palletPositionId: posId } });
@@ -66,7 +71,7 @@ export async function PATCH(
         }
       }
 
-      // 4. Delete the InboundReceipt
+      // 5. Delete the InboundReceipt
       await prisma.inboundReceipt.delete({ where: { id: targetId } });
 
     } else if (targetModel === "Product") {
@@ -126,12 +131,16 @@ export async function PATCH(
       }
       await prisma.packingListItem.deleteMany({ where: { packingListId: targetId } });
       await prisma.packingList.delete({ where: { id: targetId } });
+
+    } else if (targetModel === "User") {
+      // Soft-delete user so they can't login or be assigned tasks, but historical data remains
+      await prisma.user.update({ where: { id: targetId }, data: { isActive: false } });
     }
 
-    // 5. Mark the delete request as approved
+    // 5. Mark the delete request as deleted
     const updated = await (prisma as any).deleteRequest.update({
       where: { id },
-      data: { status: "approved", reviewNote: reviewNote?.trim() || null, updatedAt: new Date() },
+      data: { status: "deleted", reviewNote: reviewNote?.trim() || null, updatedAt: new Date() },
     });
 
     return NextResponse.json(updated);

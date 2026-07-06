@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const validModels = ["InboundReceipt", "Product", "Invoice", "Customer", "DeliveryTicket", "DeliveryOrder", "PackingList"];
+    const validModels = ["InboundReceipt", "Product", "Invoice", "Customer", "DeliveryTicket", "DeliveryOrder", "PackingList", "User"];
     if (!validModels.includes(targetModel)) {
       return NextResponse.json({ error: `Invalid targetModel: ${targetModel}` }, { status: 400 });
     }

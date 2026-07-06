@@ -55,21 +55,28 @@ export async function POST(req: NextRequest) {
         // rackRowId format: "rackId_rackCode_rowNumber"
         const [rackId, rackCode, rowNumberStr] = item.rackRowId.split("_");
         const rowNumber = Number(rowNumberStr);
+        const levelNumber = item.levelNumber !== undefined && item.levelNumber !== "" ? Number(item.levelNumber) : null;
 
-        // Find an available pallet position in this rack row
+        // Build the where clause for finding an available position
+        const positionWhere: any = {
+          rackId,
+          rowNumber,
+          isOccupied: false,
+        };
+        // If user selected a specific tier, target that tier only
+        if (levelNumber !== null) positionWhere.levelNumber = levelNumber;
+
+        // Find an available pallet position in this rack row (and tier if specified)
         const availablePosition = await tx.palletPosition.findFirst({
-          where: {
-            rackId,
-            rowNumber,
-            isOccupied: false,
-          },
+          where: positionWhere,
           orderBy: {
-            levelNumber: 'asc', // Fill from bottom up
+            levelNumber: 'asc', // Fill from bottom up if no tier specified
           }
         });
 
         if (!availablePosition) {
-          throw new Error(`No empty pallet positions available in Rack ${rackCode} Row ${rowNumber}`);
+          const tierInfo = levelNumber !== null ? ` Tier ${levelNumber}` : "";
+          throw new Error(`No empty pallet positions available in Rack ${rackCode} Row ${rowNumber}${tierInfo}`);
         }
 
         // Create StockLedger

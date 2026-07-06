@@ -458,30 +458,32 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                       </div>
                     </div>
                     
-                    <table className="w-full border-collapse mt-2 text-left">
-                      <thead className="border-b-2 border-black">
-                        <tr>
-                          <th className="py-1">Location No</th>
-                          <th className="py-1">Part Number</th>
-                          <th className="py-1">Description</th>
-                          <th className="py-1">Lot/Batch No</th>
-                          <th className="py-1">Pallet Id</th>
-                          <th className="py-1 text-center">Quantity</th>
-                        </tr>
-                      </thead>
-                      <tbody className="border-b-2 border-black">
-                        {formData.items.map((item, i) => (
-                          <tr key={i}>
-                            <td className="py-1">F6</td>
-                            <td className="py-1 bg-yellow-200/50 font-mono">{item.productCode}</td>
-                            <td className="py-1">{item.productName}</td>
-                            <td className="py-1 bg-yellow-200/50 font-mono text-[10px]">{item.lotBatchNo}</td>
-                            <td className="py-1">*</td>
-                            <td className="py-1 text-center">{item.delQtyPcs}</td>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse mt-2 text-left">
+                        <thead className="border-b-2 border-black">
+                          <tr>
+                            <th className="py-1">Location No</th>
+                            <th className="py-1">Part Number</th>
+                            <th className="py-1">Description</th>
+                            <th className="py-1">Lot/Batch No</th>
+                            <th className="py-1">Pallet Id</th>
+                            <th className="py-1 text-center">Quantity</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody className="border-b-2 border-black">
+                          {formData.items.map((item, i) => (
+                            <tr key={i}>
+                              <td className="py-1">F6</td>
+                              <td className="py-1 bg-yellow-200/50 font-mono">{item.productCode}</td>
+                              <td className="py-1">{item.productName}</td>
+                              <td className="py-1 bg-yellow-200/50 font-mono text-[10px]">{item.lotBatchNo}</td>
+                              <td className="py-1">*</td>
+                              <td className="py-1 text-center">{item.delQtyPcs}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     <div className="flex justify-end mt-4">
                       <div className="w-1/2">
                         <div className="flex justify-between"><span className="font-semibold">Total Quantity:</span> <span>30</span></div>

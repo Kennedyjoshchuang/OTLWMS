@@ -4,11 +4,11 @@ import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Package, Lock, Mail, ArrowRight } from "lucide-react";
+import { Lock, User, ArrowRight } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,22 +19,22 @@ export default function LoginPage() {
     setError("");
 
     const res = await signIn("credentials", {
-      email,
+      username,
       password,
       redirect: false,
     });
 
     if (res?.error) {
-      setError("Invalid email or password");
+      setError("Username atau password salah");
       setLoading(false);
     } else {
       router.push("/dashboard");
     }
   };
 
-  const loginAs = (roleEmail: string) => {
-    setEmail(roleEmail);
-    setPassword("Admin@123");
+  const loginAs = (u: string, p = "Admin@123") => {
+    setUsername(u);
+    setPassword(p);
   };
 
   return (
@@ -59,21 +59,24 @@ export default function LoginPage() {
             </div>
           )}
           
+          {/* Username */}
           <div className="space-y-1">
-            <label className="text-sm font-medium text-slate-200 ml-1">Email Address</label>
+            <label className="text-sm font-medium text-slate-200 ml-1">Username</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                placeholder="admin@omegatrust.id"
+                placeholder="contoh: budi.santoso"
                 required
+                autoComplete="username"
               />
             </div>
           </div>
 
+          {/* Password */}
           <div className="space-y-1">
             <label className="text-sm font-medium text-slate-200 ml-1">Password</label>
             <div className="relative">
@@ -85,6 +88,7 @@ export default function LoginPage() {
                 className="w-full pl-10 pr-4 py-3 bg-slate-800/50 border border-slate-700 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 placeholder="••••••••"
                 required
+                autoComplete="current-password"
               />
             </div>
           </div>
@@ -102,13 +106,14 @@ export default function LoginPage() {
         <div className="mt-8 pt-6 border-t border-slate-700/50">
           <p className="text-xs text-slate-400 text-center mb-3 uppercase tracking-wider font-semibold">Demo Accounts</p>
           <div className="flex flex-wrap gap-2 justify-center">
-            <button onClick={() => loginAs('admin@omegaTrust.id')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">Admin</button>
-            <button onClick={() => loginAs('wh@omegaTrust.id')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">WH Admin</button>
-            <button onClick={() => loginAs('checker@omegaTrust.id')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">Checker</button>
-            <button onClick={() => loginAs('picker@omegaTrust.id')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">Picker</button>
-            <button onClick={() => loginAs('driver@omegaTrust.id')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">Driver</button>
-            <button onClick={() => loginAs('jotun@jotun.com')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">Customer</button>
+            <button onClick={() => loginAs('admin')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">admin</button>
+            <button onClick={() => loginAs('wh')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">wh</button>
+            <button onClick={() => loginAs('checker')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">checker</button>
+            <button onClick={() => loginAs('picker')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">picker</button>
+            <button onClick={() => loginAs('driver')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">driver</button>
+            <button onClick={() => loginAs('jotun@jotun.com')} className="text-xs px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors border border-slate-700">jotun</button>
           </div>
+          <p className="text-[10px] text-slate-500 text-center mt-2">Password semua akun: <span className="font-mono text-slate-400">Admin@123</span></p>
         </div>
       </div>
     </div>

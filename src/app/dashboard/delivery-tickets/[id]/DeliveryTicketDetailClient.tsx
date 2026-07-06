@@ -381,28 +381,30 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                 </div>
               </div>
 
-              <table className="w-full border-collapse border text-sm">
-                <thead className="bg-slate-100">
-                  <tr>
-                    <th className="border p-2 text-left">Product Code</th>
-                    <th className="border p-2 text-left">Description</th>
-                    <th className="border p-2 text-left">Batch No</th>
-                    <th className="border p-2 text-right">Qty (pcs)</th>
-                    <th className="border p-2 text-right">Qty (L)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ticket.items.map((item) => (
-                    <tr key={item.id} className="even:bg-slate-50">
-                      <td className="border p-2 font-mono font-semibold">{item.productCode}</td>
-                      <td className="border p-2">{item.productName || "-"}</td>
-                      <td className="border p-2 font-mono text-xs">{item.lotBatchNo || "-"}</td>
-                      <td className="border p-2 text-right font-bold">{item.delQtyPcs}</td>
-                      <td className="border p-2 text-right">{item.delQtyLiter?.toFixed(1) || "-"}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border text-sm">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      <th className="border p-2 text-left">Product Code</th>
+                      <th className="border p-2 text-left">Description</th>
+                      <th className="border p-2 text-left">Batch No</th>
+                      <th className="border p-2 text-right">Qty (pcs)</th>
+                      <th className="border p-2 text-right">Qty (L)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {ticket.items.map((item) => (
+                      <tr key={item.id} className="even:bg-slate-50">
+                        <td className="border p-2 font-mono font-semibold">{item.productCode}</td>
+                        <td className="border p-2">{item.productName || "-"}</td>
+                        <td className="border p-2 font-mono text-xs">{item.lotBatchNo || "-"}</td>
+                        <td className="border p-2 text-right font-bold">{item.delQtyPcs}</td>
+                        <td className="border p-2 text-right text-slate-500">{item.delQtyLiter?.toLocaleString() || "-"} L</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

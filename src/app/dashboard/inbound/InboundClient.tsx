@@ -30,6 +30,7 @@ interface InboundItem {
   batchNumber: string;
   qty: number;
   rackRowId: string;
+  levelNumber: number | "";
 }
 
 interface Props {
@@ -94,7 +95,7 @@ export default function InboundClient({
   );
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<InboundItem[]>([
-    { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "" },
+    { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "", levelNumber: "" },
   ]);
 
   // Compute Product options for Select
@@ -139,6 +140,36 @@ export default function InboundClient({
     }));
   }, [rackRowOptions]);
 
+  // Compute level (tier) options for a given rackRowId
+  const getLevelOptions = (rackRowId: string) => {
+    if (!rackRowId) return [];
+    const parts = rackRowId.split("_");
+    const rackId = parts[0];
+    const rowNumber = Number(parts[2]);
+    const rack = racks.find((r: any) => r.id === rackId);
+    if (!rack) return [];
+
+    const rowPositions = rack.positions.filter((p: any) => p.rowNumber === rowNumber);
+    const levelMap = new Map<number, any[]>();
+    rowPositions.forEach((p: any) => {
+      if (!levelMap.has(p.levelNumber)) levelMap.set(p.levelNumber, []);
+      levelMap.get(p.levelNumber)!.push(p);
+    });
+
+    return Array.from(levelMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([levelNumber, positions]) => {
+        const occupied = positions.filter((p: any) => p.isOccupied).length;
+        const total = positions.length;
+        const isFull = occupied >= total;
+        return {
+          value: levelNumber,
+          label: `Tier ${levelNumber} — ${total - occupied} slot kosong${isFull ? " (FULL)" : ""}`,
+          isDisabled: isFull,
+        };
+      });
+  };
+
   // ── Filter table
   const filtered = initialReceipts.filter(
     (r) =>
@@ -170,14 +201,19 @@ export default function InboundClient({
     value: string | number
   ) => {
     setItems((prev) =>
-      prev.map((it, i) => (i === idx ? { ...it, [field]: value } : it))
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        // Reset level when row changes
+        if (field === "rackRowId") return { ...it, rackRowId: String(value), levelNumber: "" };
+        return { ...it, [field]: value };
+      })
     );
   };
 
   const addItem = () =>
     setItems((prev) => [
       ...prev,
-      { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "" },
+      { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "", levelNumber: "" },
     ]);
 
   const removeItem = (idx: number) =>
@@ -190,7 +226,7 @@ export default function InboundClient({
     setReceivedDate(new Date().toISOString().slice(0, 10));
     setNotes("");
     setItems([
-      { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "" },
+      { productId: "", productCode: "", productName: "", sizeLiter: 5, batchNumber: "", qty: 1, rackRowId: "", levelNumber: "" },
     ]);
     setSaveError("");
     setSaveSuccess(false);
@@ -200,8 +236,8 @@ export default function InboundClient({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerId) { setSaveError("Please select a customer."); return; }
-    if (items.some((it) => !it.productId || !it.rackRowId)) {
-      setSaveError("Please select a product and a warehouse location for each line item.");
+    if (items.some((it) => !it.productId || !it.rackRowId || it.levelNumber === "")) {
+      setSaveError("Please select a product, location (row), and tier for each line item.");
       return;
     }
     setSaveError("");
@@ -310,19 +346,36 @@ export default function InboundClient({
                 </tr>
               ) : (
                 filtered.map((receipt) => (
-                  <tr key={receipt.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-800">{receipt.receiptNumber}</td>
-                    <td className="px-6 py-4">{receipt.customer?.name}</td>
+                  <tr
+                    key={receipt.id}
+                    className={`transition-colors ${
+                      receipt.isDeleted
+                        ? "bg-red-50/60 opacity-70"
+                        : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <td className="px-6 py-4 font-medium text-slate-800">
+                      <span className={receipt.isDeleted ? "line-through text-slate-400" : ""}>
+                        {receipt.receiptNumber}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">{receipt.customer?.name || <span className="text-slate-300 italic text-xs">—</span>}</td>
                     <td className="px-6 py-4">{formatDateTime(receipt.receivedDate)}</td>
                     <td className="px-6 py-4">
-                      <div>{receipt.totalPcsReceived} pcs</div>
-                      {receipt.outboundedQty > 0 && (
-                        <div className="text-[11px] text-slate-500 mt-0.5">
-                          Outbounded: {receipt.outboundedQty} pcs
+                      {receipt.isDeleted ? (
+                        <span className="text-slate-400 italic text-xs">—</span>
+                      ) : (
+                        <div>
+                          <div>{receipt.totalPcsReceived} pcs</div>
+                          {receipt.outboundedQty > 0 && (
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              Outbounded: {receipt.outboundedQty} pcs
+                            </div>
+                          )}
                         </div>
                       )}
                     </td>
-                    <td className="px-6 py-4">{receipt.checker?.fullName || "-"}</td>
+                    <td className="px-6 py-4">{receipt.checker?.fullName || <span className="text-slate-300 italic text-xs">—</span>}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`px-2.5 py-1 rounded-full text-xs font-semibold text-white ${
@@ -331,40 +384,47 @@ export default function InboundClient({
                       >
                         {STATUS_LABEL[receipt.status] || receipt.status}
                       </span>
+                      {receipt.isDeleted && receipt.requestedBy && (
+                        <p className="text-[10px] text-slate-400 mt-1">by {receipt.requestedBy}</p>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-1.5">
-                        {receipt.status !== "discrepancy" && (
-                          <button
-                            onClick={() => handleUndo(receipt.id)}
-                            disabled={undoTargetId === receipt.id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
-                            title="Undo GRN"
-                          >
-                            {undoTargetId === receipt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
-                            Undo
-                          </button>
-                        )}
-                        {pendingDeleteIds.has(receipt.id) ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
-                            <Clock className="w-3 h-3" />
-                            Delete Pending
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setDeleteTarget(receipt);
-                              setDeleteReason("");
-                              setDeleteError("");
-                              setDeleteSuccess(false);
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Pengajuan Delete
-                          </button>
-                        )}
-                      </div>
+                      {receipt.isDeleted ? (
+                        <span className="text-[11px] text-slate-400 italic">Data removed</span>
+                      ) : (
+                        <div className="flex justify-end gap-1.5">
+                          {receipt.status !== "discrepancy" && (
+                            <button
+                              onClick={() => handleUndo(receipt.id)}
+                              disabled={undoTargetId === receipt.id}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
+                              title="Undo GRN"
+                            >
+                              {undoTargetId === receipt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+                              Undo
+                            </button>
+                          )}
+                          {pendingDeleteIds.has(receipt.id) ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
+                              <Clock className="w-3 h-3" />
+                              Delete Pending
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setDeleteTarget(receipt);
+                                setDeleteReason("");
+                                setDeleteError("");
+                                setDeleteSuccess(false);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Pengajuan Delete
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -508,14 +568,14 @@ export default function InboundClient({
                           />
                         </div>
 
-                        {/* Location (Rack Row) select — col 3 */}
-                        <div className="col-span-3">
-                          <label className="text-[10px] font-medium text-slate-400 uppercase">Location (Box)</label>
+                        {/* Location (Rack Row) select — col 2 */}
+                        <div className="col-span-2">
+                          <label className="text-[10px] font-medium text-slate-400 uppercase">Row</label>
                           <Select
                             options={locationOptions}
                             value={locationOptions.find(o => o.value === item.rackRowId) || null}
                             onChange={(val) => handleItemChange(idx, "rackRowId", val?.value || "")}
-                            placeholder="— Select Location —"
+                            placeholder="— Row —"
                             className="text-xs mt-0.5"
                             styles={{
                               control: (base) => ({ ...base, borderRadius: "0.5rem", minHeight: "34px", height: "34px", borderColor: "#e2e8f0" })
@@ -523,8 +583,24 @@ export default function InboundClient({
                           />
                         </div>
 
-                        {/* Batch — col 3 */}
-                        <div className="col-span-3">
+                        {/* Level/Tier select — col 2 */}
+                        <div className="col-span-2">
+                          <label className="text-[10px] font-medium text-slate-400 uppercase">Tier</label>
+                          <Select
+                            options={getLevelOptions(item.rackRowId)}
+                            value={item.levelNumber !== "" ? getLevelOptions(item.rackRowId).find(o => o.value === item.levelNumber) || null : null}
+                            onChange={(val) => handleItemChange(idx, "levelNumber", val?.value ?? "")}
+                            placeholder={item.rackRowId ? "— Tier —" : "Pilih row dulu"}
+                            isDisabled={!item.rackRowId}
+                            className="text-xs mt-0.5"
+                            styles={{
+                              control: (base) => ({ ...base, borderRadius: "0.5rem", minHeight: "34px", height: "34px", borderColor: "#e2e8f0" })
+                            }}
+                          />
+                        </div>
+
+                        {/* Batch — col 2 */}
+                        <div className="col-span-2">
                           <label className="text-[10px] font-medium text-slate-400 uppercase">Batch No.</label>
                           <input
                             type="text"

@@ -6,6 +6,12 @@ export const dynamic = "force-dynamic";
 export default async function EmployeesPage() {
   const users = await prisma.user.findMany({
     orderBy: { role: "asc" },
+    include: {
+      deleteRequests: {
+        where: { status: "pending" },
+        take: 1,
+      }
+    }
   });
 
   return (

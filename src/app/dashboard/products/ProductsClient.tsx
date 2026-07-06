@@ -7,6 +7,7 @@ import {
   Pencil, Trash2, Box, ChevronDown, PackageSearch, ToggleLeft, ToggleRight,
   AlertTriangle, Clock, MessageSquare,
 } from "lucide-react";
+import Select from "react-select";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Customer { id: string; name: string; code: string }
@@ -64,6 +65,13 @@ export default function ProductsClient({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+
+  const customerOptions = useMemo(() => {
+    return customers.map(c => ({
+      value: c.id,
+      label: `${c.name} (${c.code})`
+    }));
+  }, [customers]);
 
   // Table state
   const [search, setSearch] = useState("");
@@ -328,13 +336,7 @@ export default function ProductsClient({
                   <td className="px-5 py-3.5 text-slate-500 text-xs">{p.paintType || "—"}</td>
                   <td className="px-5 py-3.5">
                     {p.colorName ? (
-                      <div className="flex items-center gap-1.5">
-                        <div
-                          className="w-3 h-3 rounded-full border border-slate-200 shrink-0"
-                          style={{ background: p.colorCode ? `#${p.colorCode}` : "#94a3b8" }}
-                        />
-                        <span className="text-xs text-slate-600">{p.colorName}</span>
-                      </div>
+                      <span className="text-xs text-slate-600">{p.colorName}</span>
                     ) : (
                       <span className="text-slate-400">—</span>
                     )}
@@ -443,17 +445,23 @@ export default function ProductsClient({
                     Customer *
                   </label>
                   {modalMode === "add" ? (
-                    <select
-                      value={form.customerId}
-                      onChange={(e) => setField("customerId", e.target.value)}
-                      required
-                      className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                    >
-                      <option value="">— Pilih customer —</option>
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name} ({c.code})</option>
-                      ))}
-                    </select>
+                    <Select
+                      options={customerOptions}
+                      value={customerOptions.find((o) => o.value === form.customerId) || null}
+                      onChange={(val) => setField("customerId", val?.value || "")}
+                      placeholder="— Pilih customer —"
+                      isSearchable={true}
+                      className="text-sm"
+                      styles={{
+                        control: (base) => ({
+                          ...base,
+                          borderRadius: "0.75rem",
+                          minHeight: "42px",
+                          borderColor: "#e2e8f0",
+                          backgroundColor: "#f8fafc",
+                        }),
+                      }}
+                    />
                   ) : (
                     <input
                       readOnly

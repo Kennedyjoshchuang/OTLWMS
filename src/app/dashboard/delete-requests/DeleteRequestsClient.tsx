@@ -65,12 +65,14 @@ const MODEL_COLOR: Record<string, string> = {
 const STATUS_STYLE: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700 border border-yellow-200",
   approved: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+  deleted: "bg-emerald-100 text-emerald-700 border border-emerald-200",
   rejected: "bg-red-100 text-red-700 border border-red-200",
 };
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pending",
-  approved: "Approved",
+  approved: "Deleted",
+  deleted: "Deleted",
   rejected: "Rejected",
 };
 
@@ -90,7 +92,12 @@ export default function DeleteRequestsClient({ initialRequests }: Props) {
       r.targetLabel.toLowerCase().includes(search.toLowerCase()) ||
       r.requestedBy.fullName.toLowerCase().includes(search.toLowerCase()) ||
       MODEL_LABEL[r.targetModel]?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || r.status === statusFilter;
+    const matchStatus =
+      statusFilter === "all"
+        ? true
+        : statusFilter === "deleted"
+        ? (r.status === "approved" || r.status === "deleted")
+        : r.status === statusFilter;
     return matchSearch && matchStatus;
   });
 
@@ -148,11 +155,10 @@ export default function DeleteRequestsClient({ initialRequests }: Props) {
         )}
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
           { label: "Pending", count: requests.filter((r) => r.status === "pending").length, color: "text-yellow-600 bg-yellow-50 border-yellow-200" },
-          { label: "Approved", count: requests.filter((r) => r.status === "approved").length, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+          { label: "Deleted", count: requests.filter((r) => r.status === "approved" || r.status === "deleted").length, color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
           { label: "Rejected", count: requests.filter((r) => r.status === "rejected").length, color: "text-red-600 bg-red-50 border-red-200" },
         ].map((stat) => (
           <div key={stat.label} className={`rounded-2xl border p-4 ${stat.color}`}>
@@ -183,7 +189,7 @@ export default function DeleteRequestsClient({ initialRequests }: Props) {
           >
             <option value="all">All Status</option>
             <option value="pending">Pending</option>
-            <option value="approved">Approved</option>
+            <option value="deleted">Deleted</option>
             <option value="rejected">Rejected</option>
           </select>
         </div>

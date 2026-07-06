@@ -38,15 +38,22 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   const stats = useMemo(() => {
     let total = 0;
     let occupied = 0;
+    let totalLiters = 0;
     racks.forEach(rack => {
       total += rack.totalPositions;
       occupied += rack.positions.filter((p: any) => p.isOccupied).length;
+      rack.positions.forEach((p: any) => {
+        p.stockLedgers.forEach((sl: any) => {
+          totalLiters += sl.quantityLiter || 0;
+        });
+      });
     });
     return {
       total,
       occupied,
       available: total - occupied,
-      rate: total > 0 ? Math.round((occupied / total) * 100) : 0
+      rate: total > 0 ? Math.round((occupied / total) * 100) : 0,
+      totalLiters
     };
   }, [racks]);
 
@@ -258,8 +265,8 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       });
     }
 
-    // Row E: 18 cells, x = 13.05m. Spans y = 6.0 to 24.0
-    for (let r = 1; r <= 18; r++) {
+    // Row E: 16 cells, x = 13.05m. Spans y = 6.0 to 22.0
+    for (let r = 1; r <= 16; r++) {
       cells.push({
         rackCode: "E",
         rowNumber: r,
@@ -410,13 +417,10 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
             <Activity className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Occupancy Rate</p>
-            <div className="flex items-baseline gap-2">
-              <h3 className="text-2xl font-bold text-slate-800">{stats.rate}%</h3>
-              <div className="w-16 bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                <div className="bg-amber-500 h-full" style={{ width: `${stats.rate}%` }}></div>
-              </div>
-            </div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Liters</p>
+            <h3 className="text-2xl font-bold text-slate-800">
+              {stats.totalLiters.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
+            </h3>
           </div>
         </div>
       </div>
@@ -579,8 +583,8 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
             {/* 6. Rack Row Labels (Matching drawing layout) */}
             <text x="3.35" y="20.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">A</text>
             <text x="4.55" y="20.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">B</text>
-            <text x="8.50" y="21.6" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">C</text>
-            <text x="9.70" y="21.6" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">D</text>
+            <text x="8.50" y="20.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">C</text>
+            <text x="9.70" y="20.7" textAnchor="middle" fontSize="0.6" fontWeight="bold" fill="#1e293b">D</text>
             <text x="13.65" y="25.1" textAnchor="middle" fontSize="0.8" fontWeight="bold" fill="#000000">E</text>
 
             {/* 7. CAD Dimension Lines & Arrows */}
@@ -628,14 +632,6 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
             <line x1="10.3" y1="12.0" x2="13.05" y2="12.0" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
             <text x="11.675" y="11.7" textAnchor="middle" fontSize="0.32" fontWeight="bold" fill="#64748b">2,75 m</text>
 
-            {/* Cell Size indicator (Annotating cell C14) */}
-            {/* Height 1.0m (left of C14) */}
-            <line x1="7.5" y1="19.0" x2="7.5" y2="20.0" stroke="#000000" strokeWidth="0.08" strokeDasharray="0.15 0.15" markerStart="url(#thick-arrow)" markerEnd="url(#thick-arrow)" />
-            <text x="7.1" y="19.5" textAnchor="middle" fontSize="0.45" transform="rotate(-90 7.1 19.5)" fill="#000000">1m</text>
-            
-            {/* Width 1.2m (under C14) */}
-            <line x1="7.9" y1="20.4" x2="9.1" y2="20.4" stroke="#000000" strokeWidth="0.08" strokeDasharray="0.15 0.15" markerStart="url(#thick-arrow)" markerEnd="url(#thick-arrow)" />
-            <text x="8.5" y="20.9" textAnchor="middle" fontSize="0.45" fill="#000000">1,2m</text>
 
             {/* Charging Station width indicator */}
             <line x1="0" y1="24.3" x2="3.0" y2="24.3" stroke="#94a3b8" strokeWidth="0.04" markerStart="url(#arrow)" markerEnd="url(#arrow)" />
