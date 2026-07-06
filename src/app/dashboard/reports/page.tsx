@@ -361,7 +361,7 @@ export default function KpiReportPage() {
         {/* ── Header ── */}
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-800">KPI Live Dashboard</h1>
+            <h1 className="text-2xl font-bold text-slate-800 dark:text-zinc-100">KPI Live Dashboard</h1>
             <p className="text-slate-500 mt-1 text-sm">
               Key Performance Indicators — auto-refreshes every 30 seconds
             </p>

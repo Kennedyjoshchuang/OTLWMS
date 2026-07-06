@@ -39,7 +39,7 @@ export default async function DeliveriesPage() {
             <Truck className="w-7 h-7 text-primary" />
             Deliveries Monitoring
           </h1>
-          <p className="text-slate-500 mt-1">
+          <p className="text-slate-500 dark:text-zinc-400 mt-1">
             Driver dapat menandai pengiriman dan menggunakan Undo jika salah.
           </p>
         </div>

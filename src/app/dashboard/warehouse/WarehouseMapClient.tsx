@@ -769,9 +769,9 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       }}>
         <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl p-6 bg-white shadow-2xl">
           <DialogHeader className="border-b pb-4 mb-4 flex flex-row items-center justify-between">
-            <DialogTitle className="flex items-center gap-2.5 text-2xl text-slate-800 w-full pr-8">
-              <Layers className="w-6 h-6 text-indigo-600 shrink-0" />
-              <div className="flex justify-between items-center w-full">
+            <DialogTitle className="flex items-start sm:items-center gap-2.5 text-xl sm:text-2xl text-slate-800 w-full pr-8">
+              <Layers className="w-6 h-6 text-indigo-600 shrink-0 mt-1 sm:mt-0" />
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center w-full gap-2">
                 <span className="truncate">
                   {selectedCell && (
                     <>
@@ -782,7 +782,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                 {selectedCell && !isEditing && (
                   <button
                     onClick={startEditing}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors ml-4 shrink-0"
+                    className="flex items-center justify-center gap-1 px-2.5 py-1.5 sm:py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors sm:ml-4 shrink-0 w-full sm:w-auto"
                   >
                     <Pencil className="w-3 h-3" />
                     Edit Names
@@ -852,7 +852,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex gap-3 pt-3 border-t">
+                <div className="flex flex-col sm:flex-row gap-3 pt-3 border-t">
                   <button
                     type="button"
                     onClick={() => setIsEditing(false)}
@@ -915,7 +915,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                               : matched ? 'border-amber-400 bg-amber-50/50 shadow-sm' : 'border-dashed border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <div className="flex justify-between items-center border-b pb-1.5 border-slate-200/50">
+                          <div className="flex flex-wrap gap-2 justify-between items-center border-b pb-1.5 border-slate-200/50">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded shadow-sm">
                                 {levelName}

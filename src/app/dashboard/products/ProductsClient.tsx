@@ -250,7 +250,7 @@ export default function ProductsClient({
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
           <div className="flex items-center gap-3 flex-1">
             {/* Search */}
-            <div className="relative flex-1 max-w-xs">
+            <div className="relative flex-1 w-full sm:max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
@@ -262,12 +262,12 @@ export default function ProductsClient({
             </div>
 
             {/* Filter customer */}
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <select
                 value={filterCustomer}
                 onChange={(e) => setFilterCustomer(e.target.value)}
-                className="appearance-none pr-9 pl-3 py-2 border rounded-xl bg-slate-50 text-sm focus:ring-2 focus:ring-primary outline-none"
+                className="w-full sm:w-auto appearance-none pr-9 pl-3 py-2 border rounded-xl bg-slate-50 text-sm focus:ring-2 focus:ring-primary outline-none"
               >
                 <option value="">All Customers</option>
                 {customers.map((c) => (
@@ -284,7 +284,7 @@ export default function ProductsClient({
 
           <button
             onClick={openAdd}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20 whitespace-nowrap"
+            className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20 whitespace-nowrap w-full sm:w-auto"
           >
             <Plus className="w-5 h-5" />
             Add Product
@@ -359,7 +359,7 @@ export default function ProductsClient({
                       <button
                         onClick={() => openEdit(p)}
                         title="Edit product"
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors border border-primary/10"
+                        className="flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors border border-primary/10"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                         Edit
@@ -367,7 +367,7 @@ export default function ProductsClient({
                       <button
                         onClick={() => setDeleteTarget(p)}
                         title="Request Deletion"
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
+                        className="flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         Pengajuan Delete
@@ -472,7 +472,7 @@ export default function ProductsClient({
                 </div>
 
                 {/* Code + Name */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
                       Product Code *
@@ -519,7 +519,7 @@ export default function ProductsClient({
                 </div>
 
                 {/* Paint Type + Color Name + Color Code */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
                       Paint Type
@@ -566,7 +566,7 @@ export default function ProductsClient({
                 </div>
 
                 {/* Size + Weight */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
                       Size (Liter)

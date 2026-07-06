@@ -28,7 +28,16 @@ export default async function InboundPage() {
       select: { id: true, productCode: true, productName: true, sizeLiter: true, weightKg: true },
     }),
     prisma.warehouseRack.findMany({
-      include: { positions: true },
+      include: { 
+        positions: {
+          include: {
+            stockLedgers: {
+              where: { quantity: { gt: 0 } },
+              select: { quantityLiter: true }
+            }
+          }
+        }
+      },
       orderBy: { rackCode: "asc" },
     }),
     (prisma as any).deleteRequest.findMany({
@@ -90,12 +99,12 @@ export default async function InboundPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Inbound (GRN)</h1>
-          <p className="text-slate-500 mt-1">Manage incoming goods, packing lists, and verification.</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-zinc-100">Inbound (GRN)</h1>
+          <p className="text-slate-500 dark:text-zinc-400 mt-1">Manage incoming goods, packing lists, and verification.</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 overflow-hidden transition-colors duration-300">
         <InboundClient
           initialReceipts={allReceipts}
           customers={customers}

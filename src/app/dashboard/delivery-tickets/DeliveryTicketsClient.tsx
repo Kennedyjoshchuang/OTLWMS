@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import CreatableSelect from "react-select/creatable";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
@@ -28,9 +29,12 @@ const SIMULATED_OCR = {
   ],
 };
 
-export default function DeliveryTicketsClient({ initialTickets, customerId }: { initialTickets: any[]; customerId?: string }) {
+export default function DeliveryTicketsClient({ initialTickets, customers = [] }: { initialTickets: any[]; customers?: any[] }) {
   const router = useRouter();
   const [tickets, setTickets] = useState(initialTickets);
+  const [selectedCustomerId, setSelectedCustomerId] = useState(customers?.[0]?.id || "");
+  const [additionalCustomers, setAdditionalCustomers] = useState<any[]>([]);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [search, setSearch] = useState("");
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [ocrStep, setOcrStep] = useState<"upload" | "processing" | "review" | "saving" | "success">("upload");
@@ -60,6 +64,28 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (ocrStep === "review" && selectedCustomerId && formData.items.length > 0) {
+      setLocLoading(true);
+      fetch("/api/delivery-tickets/lookup-locations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: selectedCustomerId,
+          items: formData.items.map(i => ({ productCode: i.productCode, lotBatchNo: i.lotBatchNo })),
+        }),
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.locations) setLocations(data.locations);
+      })
+      .catch(e => console.error(e))
+      .finally(() => setLocLoading(false));
+    } else if (ocrStep === "review") {
+      setLocations([]);
+    }
+  }, [ocrStep, selectedCustomerId, formData.items]);
 
   const handleCreateDO = async (ticketId: string) => {
     setCreatingDO(ticketId);
@@ -191,27 +217,6 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
       };
 
       setFormData(newFormData);
-
-      // Look up warehouse locations for extracted items
-      if (customerId) {
-        setLocLoading(true);
-        try {
-          const res = await fetch("/api/delivery-tickets/lookup-locations", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              customerId,
-              items: extractedItems.map(i => ({ productCode: i.productCode, lotBatchNo: i.lotBatchNo })),
-            }),
-          });
-          const apiData = await res.json();
-          if (res.ok) setLocations(apiData.locations || []);
-        } catch (e) {
-          console.error("Location lookup failed:", e);
-        } finally {
-          setLocLoading(false);
-        }
-      }
       setOcrStep("review");
     } catch (err) {
       console.error(err);
@@ -221,14 +226,14 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
   };
 
   const handleSaveAndGenerate = async () => {
-    if (!customerId) { alert("Customer ID not found. Please refresh."); return; }
+    if (!selectedCustomerId) { alert("Please select a Customer before saving."); return; }
     setOcrStep("saving");
     setSaveError(null);
     try {
       const res = await fetch("/api/delivery-tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, customerId }),
+        body: JSON.stringify({ ...formData, customerId: selectedCustomerId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -239,11 +244,11 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
       setOcrStep("success");
       // Add new ticket to list
       setTickets(prev => [data, ...prev]);
-      // Redirect to detail page after short delay
+      // Close modal after short delay
       setTimeout(() => {
         setUploadModalOpen(false);
-        router.push(`/dashboard/delivery-tickets/${data.id}`);
-      }, 1800);
+        router.refresh();
+      }, 1500);
     } catch (err) {
       console.error(err);
       setSaveError("Network error. Please try again.");
@@ -264,8 +269,8 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
   return (
     <div className="p-6">
       {/* Toolbar */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="relative w-80">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+        <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
@@ -277,19 +282,97 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
         </div>
         <button
           onClick={handleStartUpload}
-          className="flex items-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40"
+          className="flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 w-full sm:w-auto"
         >
           <FileUp className="w-5 h-5" />
           Upload Pick List
         </button>
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* Mobile Card View */}
+      <div className="block md:hidden space-y-4">
+        {filtered.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-100">
+            <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            No pick lists found.
+          </div>
+        ) : filtered.map((ticket) => (
+          <div key={ticket.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="font-bold text-slate-800 text-base">{ticket.dtNumber}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(ticket.createdAt)}</p>
+              </div>
+              <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold text-white ${STATUS_COLOR[ticket.status] || 'bg-slate-500'}`}>
+                {ticket.status === "delivered" ? "Picked" : ticket.status === "ready" ? "Waiting" : (STATUS_LABEL[ticket.status] || ticket.status)}
+              </span>
+            </div>
+            
+            <div>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Deliver To</p>
+              <p className="text-sm font-semibold text-slate-700">{ticket.deliverToName || ticket.customer.name}</p>
+            </div>
+            
+            <div className="flex justify-between items-center border-t border-slate-100 pt-3 mt-1">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Items</p>
+                <p className="text-sm font-medium text-slate-700">{ticket.items.length} items</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">OCR Status</p>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold text-white ${STATUS_COLOR[ticket.ocrStatus] || 'bg-slate-500'}`}>
+                  {STATUS_LABEL[ticket.ocrStatus] || ticket.ocrStatus}
+                </span>
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-1">
+              <Link
+                href={`/dashboard/delivery-tickets/${ticket.id}`}
+                className="p-2.5 text-primary hover:bg-primary/10 rounded-xl transition-colors bg-primary/5 flex items-center justify-center flex-1"
+              >
+                <Eye className="w-4 h-4 mr-1.5" /> <span className="text-xs font-semibold">View</span>
+              </Link>
+              <button
+                onClick={() => handleCreateDO(ticket.id)}
+                disabled={creatingDO === ticket.id}
+                className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors bg-indigo-50 disabled:opacity-50 flex items-center justify-center flex-1"
+              >
+                {creatingDO === ticket.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <><ArrowRight className="w-4 h-4 mr-1.5" /> <span className="text-xs font-semibold">Create DO</span></>
+                )}
+              </button>
+              {pendingDeleteIds.has(ticket.id) ? (
+                <span className="p-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center px-4" title="Delete Pending">
+                  <Clock className="w-4 h-4" />
+                </span>
+              ) : (
+                <button
+                  onClick={() => {
+                    setDeleteTarget(ticket);
+                    setDeleteReason("");
+                    setDeleteError("");
+                    setDeleteSuccess(false);
+                  }}
+                  className="p-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors bg-red-50 flex items-center justify-center px-4"
+                  title="Delete"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto bg-white border border-slate-200 rounded-2xl shadow-sm">
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="text-xs uppercase bg-slate-50 text-slate-500 border-y">
             <tr>
-              <th className="px-6 py-4 font-semibold">DT Number</th>
+              <th className="px-6 py-4 font-semibold">PL Number</th>
               <th className="px-6 py-4 font-semibold">Deliver To</th>
               <th className="px-6 py-4 font-semibold">Date</th>
               <th className="px-6 py-4 font-semibold">Items</th>
@@ -329,15 +412,15 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                 <td className="px-6 py-4 text-right">
                   <Link
                     href={`/dashboard/delivery-tickets/${ticket.id}`}
-                    className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors inline-flex"
-                    title="View Omega DT"
+                    className="p-3 sm:p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors inline-flex"
+                    title="View Pick List Omega"
                   >
                     <Eye className="w-4 h-4" />
                   </Link>
                   <button
                     onClick={() => handleCreateDO(ticket.id)}
                     disabled={creatingDO === ticket.id}
-                    className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors ml-2 disabled:opacity-50"
+                    className="p-3 sm:p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors ml-2 disabled:opacity-50 inline-flex items-center"
                     title="Create DO & Go to Outbound"
                   >
                     {creatingDO === ticket.id ? (
@@ -347,7 +430,7 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                     )}
                   </button>
                   {pendingDeleteIds.has(ticket.id) ? (
-                    <span className="inline-flex items-center gap-1.5 p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 ml-2" title="Delete Pending">
+                    <span className="inline-flex items-center gap-1.5 p-3 sm:p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 ml-2" title="Delete Pending">
                       <Clock className="w-4 h-4" />
                     </span>
                   ) : (
@@ -358,7 +441,7 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                         setDeleteError("");
                         setDeleteSuccess(false);
                       }}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-2"
+                      className="p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-2 inline-flex items-center"
                       title="Pengajuan Delete"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -373,7 +456,7 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
 
       {/* Upload / OCR Modal */}
       <Dialog open={uploadModalOpen} onOpenChange={setUploadModalOpen}>
-        <DialogContent className={`bg-white transition-all duration-300 ${ocrStep === "review" ? "max-w-5xl" : "max-w-md"}`}>
+        <DialogContent className={`bg-white transition-all duration-300 ${ocrStep === "review" ? "max-w-5xl" : "max-w-md"} max-h-[95vh] overflow-y-auto p-4 sm:p-6`}>
           <DialogHeader>
             <DialogTitle>Smart OCR Pick List Processing</DialogTitle>
             <DialogDescription>
@@ -416,7 +499,7 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
             {ocrStep === "saving" && (
               <div className="py-12 flex flex-col items-center justify-center text-center">
                 <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-                <h3 className="text-lg font-semibold text-slate-700">Saving & Generating Omega DT...</h3>
+                <h3 className="text-lg font-semibold text-slate-700">Saving & Generating Pick List Omega...</h3>
                 <p className="text-slate-500 mt-2 text-sm">Creating Pick List and resolving warehouse locations.</p>
               </div>
             )}
@@ -425,69 +508,71 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
             {ocrStep === "review" && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Left: Jotun Pick List Preview */}
-                <div className="bg-slate-100 rounded-xl p-4 border flex flex-col min-h-[500px]">
+                <div className="bg-slate-100 rounded-xl p-3 sm:p-4 border flex flex-col">
                   <p className="text-xs font-bold text-slate-500 uppercase mb-3">Original Document Preview</p>
-                  <div className="bg-white border shadow-sm flex flex-col p-5 text-xs text-slate-800 flex-1 rounded-lg font-sans">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <p className="text-[10px] text-slate-500">PT. Jotun Indonesia</p>
+                  
+                  {/* Mobile Wrapper for horizontal scroll if needed */}
+                  <div className="overflow-x-auto bg-white border shadow-sm rounded-lg">
+                    <div className="flex flex-col p-4 sm:p-5 text-xs text-slate-800 min-w-[500px] font-sans">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <p className="text-[10px] text-slate-500">PT. Jotun Indonesia</p>
+                        </div>
+                        <div className="text-center flex-1">
+                          <h2 className="text-lg font-bold">Pick List</h2>
+                        </div>
+                        <div className="w-16"></div>
                       </div>
-                      <div className="text-center flex-1">
-                        <h2 className="text-lg font-bold">Pick List</h2>
-                      </div>
-                      <div className="w-16"></div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <div className="flex"><span className="w-24">Order Number:</span> <span className="font-bold">{formData.orderNumber}</span></div>
-                        <div className="flex mt-1"><span className="w-24">Pick List:</span> <span className="font-bold text-sm tracking-widest">{formData.dtNumber}</span></div>
-                        <div className="flex mt-1"><span className="w-24">Customer:</span> <span>{formData.customerPoNo}</span></div>
-                        <div className="flex mt-1"><span className="w-24">Route Id:</span> <span></span></div>
-                      </div>
-                      <div>
-                        <div className="flex"><span className="w-24">Created:</span> <span>6/30/26 8:33:02 PM</span></div>
-                        <div className="flex mt-1"><span className="w-24">Delivery Date:</span> <span>6/30/26</span></div>
-                        <div className="flex mt-1">
-                           <span className="w-24">Delivery Address:</span> 
-                           <div className="flex-1">
-                             <p className="font-bold">{formData.deliverToName}</p>
-                             <p>{formData.deliverToAddress}</p>
-                           </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <div className="flex"><span className="w-24 shrink-0">Order Number:</span> <span className="font-bold truncate">{formData.orderNumber}</span></div>
+                          <div className="flex mt-1"><span className="w-24 shrink-0">Pick List:</span> <span className="font-bold text-sm tracking-widest truncate">{formData.dtNumber}</span></div>
+                          <div className="flex mt-1"><span className="w-24 shrink-0">Customer:</span> <span className="truncate">{formData.customerPoNo}</span></div>
+                          <div className="flex mt-1"><span className="w-24 shrink-0">Route Id:</span> <span></span></div>
+                        </div>
+                        <div>
+                          <div className="flex"><span className="w-24 shrink-0">Created:</span> <span className="truncate">6/30/26 8:33 PM</span></div>
+                          <div className="flex mt-1"><span className="w-24 shrink-0">Delivery Date:</span> <span>6/30/26</span></div>
+                          <div className="flex mt-1">
+                             <span className="w-24 shrink-0">Delivery Addr:</span> 
+                             <div className="flex-1">
+                               <p className="font-bold line-clamp-1">{formData.deliverToName}</p>
+                               <p className="line-clamp-2">{formData.deliverToAddress}</p>
+                             </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse mt-2 text-left">
-                        <thead className="border-b-2 border-black">
-                          <tr>
-                            <th className="py-1">Location No</th>
-                            <th className="py-1">Part Number</th>
-                            <th className="py-1">Description</th>
-                            <th className="py-1">Lot/Batch No</th>
-                            <th className="py-1">Pallet Id</th>
-                            <th className="py-1 text-center">Quantity</th>
-                          </tr>
-                        </thead>
-                        <tbody className="border-b-2 border-black">
-                          {formData.items.map((item, i) => (
-                            <tr key={i}>
-                              <td className="py-1">F6</td>
-                              <td className="py-1 bg-yellow-200/50 font-mono">{item.productCode}</td>
-                              <td className="py-1">{item.productName}</td>
-                              <td className="py-1 bg-yellow-200/50 font-mono text-[10px]">{item.lotBatchNo}</td>
-                              <td className="py-1">*</td>
-                              <td className="py-1 text-center">{item.delQtyPcs}</td>
+                      
+                      <div className="overflow-hidden">
+                        <table className="w-full border-collapse mt-2 text-left">
+                          <thead className="border-b-2 border-black">
+                            <tr>
+                              <th className="py-1 pr-2">Loc</th>
+                              <th className="py-1 pr-2">Part Number</th>
+                              <th className="py-1 pr-2">Description</th>
+                              <th className="py-1 pr-2">Batch No</th>
+                              <th className="py-1 text-center">Qty</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="flex justify-end mt-4">
-                      <div className="w-1/2">
-                        <div className="flex justify-between"><span className="font-semibold">Total Quantity:</span> <span>30</span></div>
-                        <div className="flex justify-between"><span className="font-semibold">Total Gross Weight:</span> <span>840.3</span></div>
+                          </thead>
+                          <tbody className="border-b-2 border-black">
+                            {formData.items.map((item, i) => (
+                              <tr key={i}>
+                                <td className="py-1 pr-2">F6</td>
+                                <td className="py-1 pr-2 bg-yellow-200/50 font-mono text-[11px] break-all">{item.productCode}</td>
+                                <td className="py-1 pr-2 line-clamp-1">{item.productName}</td>
+                                <td className="py-1 pr-2 bg-yellow-200/50 font-mono text-[10px] break-all">{item.lotBatchNo}</td>
+                                <td className="py-1 text-center">{item.delQtyPcs}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="flex justify-end mt-4">
+                        <div className="w-64">
+                          <div className="flex justify-between"><span className="font-semibold">Total Quantity:</span> <span>{formData.items.reduce((acc, curr) => acc + curr.delQtyPcs, 0)}</span></div>
+                          <div className="flex justify-between"><span className="font-semibold">Total Gross Weight:</span> <span>{(formData.items.reduce((acc, curr) => acc + (curr.delQtyLiter || 0), 0) * 1.3).toFixed(1)}</span></div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -499,7 +584,7 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                     <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-semibold">OCR Extraction Successful</p>
-                      <p className="text-sm opacity-90 mt-0.5">Review data before generating the Omega Trust DT.</p>
+                      <p className="text-sm opacity-90 mt-0.5">Review data before generating the Pick List Omega.</p>
                     </div>
                   </div>
 
@@ -511,7 +596,46 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                   )}
 
                   <div className="space-y-3 flex-1 overflow-y-auto max-h-[400px] pr-1">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-500 uppercase">Customer (Principal) *</label>
+                      <CreatableSelect
+                        isDisabled={isCreatingCustomer}
+                        isLoading={isCreatingCustomer}
+                        options={[...(customers || []), ...additionalCustomers].map(c => ({ value: c.id, label: c.name }))}
+                        value={selectedCustomerId ? { value: selectedCustomerId, label: [...(customers || []), ...additionalCustomers].find(c => c.id === selectedCustomerId)?.name } : null}
+                        onChange={(val: any) => {
+                          setSelectedCustomerId(val ? val.value : "");
+                        }}
+                        onCreateOption={async (inputValue) => {
+                          setIsCreatingCustomer(true);
+                          setSaveError(null);
+                          try {
+                            const res = await fetch("/api/customers", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ name: inputValue })
+                            });
+                            const data = await res.json();
+                            if (!res.ok) throw new Error(data.error || "Failed to create customer");
+                            
+                            setAdditionalCustomers(prev => [...prev, data.customer]);
+                            setSelectedCustomerId(data.customer.id);
+                          } catch (err: any) {
+                            setSaveError(err.message);
+                          } finally {
+                            setIsCreatingCustomer(false);
+                          }
+                        }}
+                        placeholder="— Select or type new customer —"
+                        formatCreateLabel={(inputValue) => `Create new customer: "${inputValue}"`}
+                        className="text-sm mt-1"
+                        styles={{
+                          control: (base) => ({ ...base, borderRadius: "0.5rem", minHeight: "38px", borderColor: "#e2e8f0" })
+                        }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="text-xs font-semibold text-slate-500 uppercase">Pick List Number</label>
                         <input
@@ -601,25 +725,25 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                         <div>
                           <p className="font-semibold text-sm">Warehouse Locations Found</p>
                           <p className="text-xs opacity-90 mt-0.5">
-                            The Omega Trust DT will include exact picking locations for all products.
+                            The Pick List Omega will include exact picking locations for all products.
                           </p>
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex gap-3 mt-5 pt-5 border-t">
+                  <div className="flex flex-col sm:flex-row gap-3 mt-5 pt-5 border-t">
                     <button
                       onClick={() => setUploadModalOpen(false)}
-                      className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+                      className="flex-1 py-3 sm:py-2.5 border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={handleSaveAndGenerate}
-                      className="flex-1 py-2.5 bg-primary text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors shadow-lg shadow-primary/20"
+                      className="flex-1 py-3 sm:py-2.5 bg-primary text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors shadow-lg shadow-primary/20"
                     >
-                      Save & Generate Omega DT
+                      Save & Generate Pick List Omega
                     </button>
                   </div>
                 </div>
@@ -632,9 +756,9 @@ export default function DeliveryTicketsClient({ initialTickets, customerId }: { 
                 <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
                   <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                 </div>
-                <h3 className="text-xl font-bold text-slate-800">Omega Trust DT Generated!</h3>
+                <h3 className="text-xl font-bold text-slate-800">Pick List Omega Generated!</h3>
                 <p className="text-slate-500 mt-2 text-sm">
-                  Pick List saved with warehouse locations. Redirecting to detail view...
+                  Pick List saved successfully.
                 </p>
               </div>
             )}

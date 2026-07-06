@@ -25,11 +25,11 @@ export default async function WarehousePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Warehouse Layout Map</h1>
-        <p className="text-slate-500 mt-1">Interactive visualization of Omega Trust Logistik warehouse.</p>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-zinc-100">Warehouse Layout Map</h1>
+        <p className="text-slate-500 dark:text-zinc-400 mt-1">Interactive visualization of Omega Trust Logistik warehouse.</p>
       </div>
       
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 overflow-hidden transition-colors duration-300">
         <WarehouseMapClient initialRacks={racks} />
       </div>
     </div>

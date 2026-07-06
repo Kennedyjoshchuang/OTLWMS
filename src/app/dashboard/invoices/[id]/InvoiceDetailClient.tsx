@@ -150,7 +150,7 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-sm"
+            className="flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border px-4 py-3 sm:py-2 rounded-xl text-sm font-medium transition-all shadow-sm w-full sm:w-auto"
           >
             <Printer className="w-4 h-4" />
             Print / Save PDF
@@ -160,7 +160,7 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
             <button
               onClick={() => handleUpdateStatus("paid")}
               disabled={updating}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-md shadow-emerald-500/10 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 sm:py-2 rounded-xl text-sm font-medium transition-all shadow-md shadow-emerald-500/10 disabled:opacity-50 w-full sm:w-auto"
             >
               <Check className="w-4 h-4" />
               Mark as Paid
@@ -171,7 +171,7 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
             <button
               onClick={() => handleUpdateStatus("sent")}
               disabled={updating}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-md shadow-blue-500/10 disabled:opacity-50"
+              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-3 sm:py-2 rounded-xl text-sm font-medium transition-all shadow-md shadow-blue-500/10 disabled:opacity-50 w-full sm:w-auto"
             >
               <CreditCard className="w-4 h-4" />
               Mark as Sent
@@ -182,7 +182,7 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
             <button
               onClick={() => handleUpdateStatus("draft")}
               disabled={updating}
-              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50"
+              className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 sm:py-2 rounded-xl text-sm font-medium transition-all disabled:opacity-50 w-full sm:w-auto"
               title="Undo Paid Status"
             >
               <X className="w-4 h-4" />
@@ -191,7 +191,7 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
           )}
 
           {isDeletePending ? (
-            <span className="flex items-center gap-2 bg-yellow-100 text-yellow-700 border border-yellow-200 px-4 py-2 rounded-xl text-sm font-medium">
+            <span className="flex items-center justify-center gap-2 bg-yellow-100 text-yellow-700 border border-yellow-200 px-4 py-3 sm:py-2 rounded-xl text-sm font-medium w-full sm:w-auto">
               <Clock className="w-4 h-4" />
               Delete Pending
             </span>
@@ -203,7 +203,7 @@ export default function InvoiceDetailClient({ invoice: initialInvoice }: { invoi
                 setDeleteError("");
                 setDeleteSuccess(false);
               }}
-              className="flex items-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 px-4 py-2 rounded-xl text-sm font-medium transition-all"
+              className="flex items-center justify-center gap-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 px-4 py-3 sm:py-2 rounded-xl text-sm font-medium transition-all w-full sm:w-auto"
             >
               <Trash2 className="w-4 h-4" />
               Pengajuan Delete

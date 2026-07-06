@@ -35,7 +35,7 @@ export function generateGRN(seq: number) {
 
 export function generateDO(seq: number) {
   const year = new Date().getFullYear()
-  return `OTL-DO-${year}-${String(seq).padStart(4, '0')}`
+  return `OTL-PL-${year}-${String(seq).padStart(4, '0')}`
 }
 
 export const STATUS_COLOR: Record<string, string> = {

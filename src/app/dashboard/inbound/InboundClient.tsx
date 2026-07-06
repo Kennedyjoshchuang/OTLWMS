@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useMemo, useEffect } from "react";
 import Select from "react-select";
+import CreatableSelect from "react-select/creatable";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
@@ -51,6 +52,7 @@ export default function InboundClient({
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const { data: session } = useSession();
 
   // Table search
   const [search, setSearch] = useState("");
@@ -89,7 +91,21 @@ export default function InboundClient({
 
   // Form state
   const [customerId, setCustomerId] = useState(customers[0]?.id ?? "");
+  const [additionalCustomers, setAdditionalCustomers] = useState<Customer[]>([]);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
   const [checkerId, setCheckerId]   = useState("");
+  const [hasAutoSetChecker, setHasAutoSetChecker] = useState(false);
+
+  useEffect(() => {
+    if (session?.user && !hasAutoSetChecker) {
+      const uId = (session.user as any).id;
+      if (checkers.some(c => c.id === uId)) {
+        setCheckerId(uId);
+      }
+      setHasAutoSetChecker(true);
+    }
+  }, [session, checkers, hasAutoSetChecker]);
+
   const [receivedDate, setReceivedDate] = useState(
     new Date().toISOString().slice(0, 10)
   );
@@ -108,7 +124,7 @@ export default function InboundClient({
 
   // Compute Rack & Row options with capacity
   const rackRowOptions = useMemo(() => {
-    const options: { id: string; label: string; percent: number }[] = [];
+    const options: { id: string; label: string; isFull: boolean }[] = [];
     racks.forEach((rack) => {
       const rowMap = new Map<number, any[]>();
       rack.positions.forEach((p: any) => {
@@ -118,13 +134,21 @@ export default function InboundClient({
       Array.from(rowMap.entries())
         .sort(([a], [b]) => a - b)
         .forEach(([rowNumber, positions]) => {
+          let totalLiter = 0;
+          positions.forEach(p => {
+             p.stockLedgers?.forEach((sl: any) => {
+               totalLiter += (sl.quantityLiter || 0);
+             });
+          });
+          
           const total = positions.length;
           const occupied = positions.filter((p) => p.isOccupied).length;
-          const percent = total > 0 ? Math.round((occupied / total) * 100) : 0;
+          const isFull = total > 0 && occupied >= total;
+          
           options.push({
             id: `${rack.id}_${rack.rackCode}_${rowNumber}`,
-            label: `${rack.rackCode === "FLOOR" ? "Floor" : `Rack ${rack.rackCode}`} - Row ${String(rowNumber).padStart(2, "0")} (${percent}% loaded)`,
-            percent,
+            label: `${rack.rackCode === "FLOOR" ? "Floor" : `Rack ${rack.rackCode}`} - Row ${String(rowNumber).padStart(2, "0")} (${totalLiter.toFixed(1)} L loaded)`,
+            isFull,
           });
         });
     });
@@ -135,8 +159,8 @@ export default function InboundClient({
   const locationOptions = useMemo(() => {
     return rackRowOptions.map(opt => ({
       value: opt.id,
-      label: opt.percent === 100 ? `${opt.label} (FULL)` : opt.label,
-      isDisabled: opt.percent === 100
+      label: opt.isFull ? `${opt.label} (FULL)` : opt.label,
+      isDisabled: opt.isFull
     }));
   }, [rackRowOptions]);
 
@@ -159,12 +183,19 @@ export default function InboundClient({
     return Array.from(levelMap.entries())
       .sort(([a], [b]) => a - b)
       .map(([levelNumber, positions]) => {
+        let totalLiter = 0;
+        positions.forEach((p: any) => {
+          p.stockLedgers?.forEach((sl: any) => {
+            totalLiter += (sl.quantityLiter || 0);
+          });
+        });
+        
         const occupied = positions.filter((p: any) => p.isOccupied).length;
         const total = positions.length;
-        const isFull = occupied >= total;
+        const isFull = total > 0 && occupied >= total;
         return {
           value: levelNumber,
-          label: `Tier ${levelNumber} — ${total - occupied} slot kosong${isFull ? " (FULL)" : ""}`,
+          label: `Tier ${levelNumber} — ${totalLiter.toFixed(1)} L loaded${isFull ? " (FULL)" : ""}`,
           isDisabled: isFull,
         };
       });
@@ -223,6 +254,7 @@ export default function InboundClient({
   const resetForm = () => {
     setCustomerId(customers[0]?.id ?? "");
     setCheckerId("");
+    setHasAutoSetChecker(false);
     setReceivedDate(new Date().toISOString().slice(0, 10));
     setNotes("");
     setItems([
@@ -244,10 +276,11 @@ export default function InboundClient({
     setSaving(true);
 
     try {
+      const finalCheckerId = checkerId || (session?.user as any)?.id || null;
       const res = await fetch("/api/inbound", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerId, checkerId, receivedDate, notes, items }),
+        body: JSON.stringify({ customerId, checkerId: finalCheckerId, receivedDate, notes, items }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save.");
@@ -302,8 +335,8 @@ export default function InboundClient({
     <>
       {/* ── Table Section ─────────────────────────────────────────────── */}
       <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <div className="relative w-80">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+          <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -316,14 +349,104 @@ export default function InboundClient({
 
           <button
             onClick={() => { resetForm(); setShowModal(true); }}
-            className="flex items-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20"
+            className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20 w-full sm:w-auto"
           >
             <Plus className="w-5 h-5" />
             New Inbound
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+      {/* Mobile Card View */}
+      <div className="block md:hidden space-y-4">
+        {filtered.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-100">
+            <Inbox className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            No inbound receipts found.
+          </div>
+        ) : filtered.map((receipt) => (
+          <div key={receipt.id} className={`bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3 ${receipt.isDeleted ? 'opacity-60' : ''}`}>
+            <div className="flex justify-between items-start">
+              <div>
+                <p className={`font-bold text-slate-800 text-base ${receipt.isDeleted ? 'line-through text-slate-400' : ''}`}>
+                  {receipt.receiptNumber}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">{formatDateTime(receipt.receivedDate)}</p>
+              </div>
+              <div className="text-right flex flex-col items-end gap-1">
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold text-white ${STATUS_COLOR[receipt.status] || 'bg-slate-500'}`}>
+                  {STATUS_LABEL[receipt.status] || receipt.status}
+                </span>
+                {receipt.isDeleted && receipt.requestedBy && (
+                  <p className="text-[10px] text-slate-400">by {receipt.requestedBy}</p>
+                )}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Customer</p>
+                <p className="text-sm font-semibold text-slate-700">{receipt.customer?.name || "-"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Checker</p>
+                <p className="text-sm font-medium text-slate-700">{receipt.checker?.fullName || "-"}</p>
+              </div>
+            </div>
+            
+            <div className="border-t border-slate-100 pt-3 mt-1">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Items Received</p>
+              {receipt.isDeleted ? (
+                <span className="text-slate-400 italic text-xs">—</span>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-slate-700">{receipt.totalPcsReceived} pcs</p>
+                  {receipt.outboundedQty > 0 && (
+                    <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                      Outbounded: {receipt.outboundedQty} pcs
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {!receipt.isDeleted && (
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-1">
+                {receipt.status !== "discrepancy" && (
+                  <button
+                    onClick={() => handleUndo(receipt.id)}
+                    disabled={undoTargetId === receipt.id}
+                    className="flex-1 py-2.5 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors bg-amber-50/50 disabled:opacity-50 flex items-center justify-center border border-amber-100"
+                  >
+                    {undoTargetId === receipt.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4 mr-1.5" />}
+                    <span className="text-xs font-semibold">Undo</span>
+                  </button>
+                )}
+                
+                {pendingDeleteIds.has(receipt.id) ? (
+                  <span className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center">
+                    <Clock className="w-4 h-4 mr-1.5" /> Pending
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setDeleteTarget(receipt);
+                      setDeleteReason("");
+                      setDeleteError("");
+                      setDeleteSuccess(false);
+                    }}
+                    className="flex-1 py-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors bg-red-50/50 flex items-center justify-center border border-red-100"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5" /> <span className="text-xs font-semibold">Delete</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto bg-white border border-slate-200 rounded-2xl shadow-sm">
           <table className="w-full text-left text-sm text-slate-600">
             <thead className="text-xs uppercase bg-slate-50 text-slate-500 border-y">
               <tr>
@@ -397,7 +520,7 @@ export default function InboundClient({
                             <button
                               onClick={() => handleUndo(receipt.id)}
                               disabled={undoTargetId === receipt.id}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
                               title="Undo GRN"
                             >
                               {undoTargetId === receipt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
@@ -417,7 +540,7 @@ export default function InboundClient({
                                 setDeleteError("");
                                 setDeleteSuccess(false);
                               }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors"
+                              className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               Pengajuan Delete
@@ -484,22 +607,46 @@ export default function InboundClient({
                 )}
 
                 {/* Row 1 — Customer & Date */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="z-20 relative">
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
                       Customer *
                     </label>
-                    <select
-                      value={customerId}
-                      onChange={(e) => setCustomerId(e.target.value)}
-                      required
-                      className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                    >
-                      <option value="">— Select customer —</option>
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
+                    <CreatableSelect
+                      isDisabled={isCreatingCustomer}
+                      isLoading={isCreatingCustomer}
+                      options={[...customers, ...additionalCustomers].map(c => ({ value: c.id, label: c.name }))}
+                      value={customerId ? { value: customerId, label: [...customers, ...additionalCustomers].find(c => c.id === customerId)?.name } : null}
+                      onChange={(val: any) => {
+                        setCustomerId(val ? val.value : "");
+                      }}
+                      onCreateOption={async (inputValue) => {
+                        setIsCreatingCustomer(true);
+                        setSaveError("");
+                        try {
+                          const res = await fetch("/api/customers", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ name: inputValue })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error || "Failed to create customer");
+                          
+                          setAdditionalCustomers(prev => [...prev, data.customer]);
+                          setCustomerId(data.customer.id);
+                        } catch (err: any) {
+                          setSaveError(err.message);
+                        } finally {
+                          setIsCreatingCustomer(false);
+                        }
+                      }}
+                      placeholder="— Select or type new customer —"
+                      formatCreateLabel={(inputValue) => `Create new customer: "${inputValue}"`}
+                      className="text-sm"
+                      styles={{
+                        control: (base) => ({ ...base, borderRadius: "0.75rem", minHeight: "42px", borderColor: "#e2e8f0" })
+                      }}
+                    />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
@@ -518,18 +665,11 @@ export default function InboundClient({
                 {/* Row 2 — Checker */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                    Checker (optional)
+                    Checker
                   </label>
-                  <select
-                    value={checkerId}
-                    onChange={(e) => setCheckerId(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                  >
-                    <option value="">— Unassigned —</option>
-                    {checkers.map((c) => (
-                      <option key={c.id} value={c.id}>{c.fullName}</option>
-                    ))}
-                  </select>
+                  <div className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-100 text-slate-500 font-medium cursor-not-allowed">
+                    {session?.user?.name || "—"}
+                  </div>
                 </div>
 
                 {/* Items */}
@@ -551,10 +691,10 @@ export default function InboundClient({
                     {items.map((item, idx) => (
                       <div
                         key={idx}
-                        className="grid grid-cols-12 gap-2 items-start p-3 bg-slate-50 rounded-xl border border-slate-100"
+                        className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-2 items-start p-4 lg:p-3 bg-slate-50 rounded-xl border border-slate-100"
                       >
-                        {/* Product select — col 3 */}
-                        <div className="col-span-3">
+                        {/* Product select — col 4 */}
+                        <div className="col-span-1 lg:col-span-4">
                           <label className="text-[10px] font-medium text-slate-400 uppercase">Product</label>
                           <Select
                             options={productOptions}
@@ -568,8 +708,8 @@ export default function InboundClient({
                           />
                         </div>
 
-                        {/* Location (Rack Row) select — col 2 */}
-                        <div className="col-span-2">
+                        {/* Location (Rack Row) select — col 3 */}
+                        <div className="col-span-1 lg:col-span-3">
                           <label className="text-[10px] font-medium text-slate-400 uppercase">Row</label>
                           <Select
                             options={locationOptions}
@@ -584,7 +724,7 @@ export default function InboundClient({
                         </div>
 
                         {/* Level/Tier select — col 2 */}
-                        <div className="col-span-2">
+                        <div className="col-span-1 lg:col-span-2">
                           <label className="text-[10px] font-medium text-slate-400 uppercase">Tier</label>
                           <Select
                             options={getLevelOptions(item.rackRowId)}
@@ -599,20 +739,8 @@ export default function InboundClient({
                           />
                         </div>
 
-                        {/* Batch — col 2 */}
-                        <div className="col-span-2">
-                          <label className="text-[10px] font-medium text-slate-400 uppercase">Batch No.</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. 4112282-1"
-                            value={item.batchNumber}
-                            onChange={(e) => handleItemChange(idx, "batchNumber", e.target.value)}
-                            className="w-full border rounded-lg px-2 py-1.5 text-xs bg-white focus:ring-2 focus:ring-primary outline-none mt-0.5"
-                          />
-                        </div>
-
                         {/* Qty — col 2 */}
-                        <div className="col-span-2">
+                        <div className="col-span-1 lg:col-span-2">
                           <label className="text-[10px] font-medium text-slate-400 uppercase">Qty (pcs)</label>
                           <input
                             type="number"
@@ -625,7 +753,7 @@ export default function InboundClient({
                         </div>
 
                         {/* Remove */}
-                        <div className="col-span-1 flex items-end pb-1 justify-center">
+                        <div className="col-span-1 lg:col-span-1 flex items-end pb-1 justify-end lg:justify-center">
                           {items.length > 1 && (
                             <button
                               type="button"

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: #059669; /* Emerald 600 */
   --color-primary-focus: #047857; /* Emerald 700 */

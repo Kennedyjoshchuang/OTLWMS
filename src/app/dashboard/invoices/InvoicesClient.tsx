@@ -232,8 +232,8 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
   return (
     <div className="p-6">
       {/* Monthly Billing Notice */}
-      <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-6 flex gap-3 items-start">
-        <Receipt className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+      <div className="bg-blue-50 border border-blue-200 rounded-xl px-5 py-4 mb-6 flex flex-col sm:flex-row gap-3 sm:items-start">
+        <Receipt className="w-5 h-5 text-blue-500 shrink-0 sm:mt-0.5" />
         <div className="flex-1">
           <p className="text-sm font-semibold text-blue-800">Invoice Bulanan Otomatis</p>
           <p className="text-sm text-blue-700 mt-0.5">
@@ -493,7 +493,7 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
                     <div className="flex justify-end gap-1.5">
                       <Link
                         href={`/dashboard/invoices/${inv.id}`}
-                        className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                        className="p-3 sm:p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors inline-flex items-center"
                         title="View Details / Print"
                       >
                         <Eye className="w-4 h-4" />
@@ -503,7 +503,7 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
                         <button
                           onClick={() => handleUpdateStatus(inv.id, "paid")}
                           disabled={updatingId === inv.id}
-                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                          className="p-3 sm:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors inline-flex items-center"
                           title="Mark as Paid"
                         >
                           <Check className="w-4 h-4" />
@@ -514,7 +514,7 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
                         <button
                           onClick={() => handleUpdateStatus(inv.id, "draft")}
                           disabled={updatingId === inv.id}
-                          className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                          className="p-3 sm:p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center"
                           title="Undo (Revert to Draft)"
                         >
                           <X className="w-4 h-4" />
@@ -533,7 +533,7 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
                             setDeleteError("");
                             setDeleteSuccess(false);
                           }}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center"
                           title="Pengajuan Delete"
                         >
                           <Trash2 className="w-4 h-4" />

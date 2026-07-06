@@ -282,22 +282,22 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
   return (
     <div className="p-6">
       {/* Toolbar */}
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
-        <div className="flex gap-2 flex-wrap">
-          <div className="relative">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               placeholder="Cari nama atau username..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-sm w-64"
+              className="w-full pl-9 pr-4 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-sm"
             />
           </div>
           <select
             value={filterRole}
             onChange={e => setFilterRole(e.target.value)}
-            className="px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary outline-none text-sm transition-all"
+            className="w-full sm:w-auto px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary outline-none text-sm transition-all"
           >
             <option value="">Semua Role</option>
             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
@@ -305,7 +305,7 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
         </div>
         <button
           onClick={openModal}
-          className="flex items-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40"
+          className="flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 w-full sm:w-auto"
         >
           <UserPlus className="w-5 h-5" />
           Tambah Karyawan
@@ -313,7 +313,7 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <div className="bg-slate-50 border rounded-xl p-4">
           <p className="text-xs text-slate-500 font-medium">Total Karyawan</p>
           <p className="text-2xl font-bold text-slate-800 mt-1">{users.length}</p>
@@ -405,7 +405,7 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
                         <button
                           onClick={() => setCredUser(user)}
                           title="Lihat Kredensial & Reset Password"
-                          className="p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-primary hover:text-white hover:border-primary transition-all"
+                          className="p-3 sm:p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-primary hover:text-white hover:border-primary transition-all"
                         >
                           <LogIn className="w-4 h-4" />
                         </button>
@@ -417,7 +417,7 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
                           }}
                           disabled={!user.isActive || (user.deleteRequests && user.deleteRequests.length > 0)}
                           title={!user.isActive ? "Sudah dihapus (nonaktif)" : "Ajukan Hapus Karyawan"}
-                          className="p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="p-3 sm:p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

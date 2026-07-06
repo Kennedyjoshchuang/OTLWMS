@@ -25,11 +25,11 @@ export default async function InvoicesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Billing & Invoices</h1>
-        <p className="text-slate-500 mt-1">Manage, view, and track customer invoices for outbound logistics services.</p>
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-zinc-100">Billing & Invoices</h1>
+        <p className="text-slate-500 dark:text-zinc-400 mt-1">Manage, view, and track customer invoices for outbound logistics services.</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl shadow-sm border border-slate-200 dark:border-zinc-800 overflow-hidden transition-colors duration-300">
         <InvoicesClient initialInvoices={serializedInvoices as any} />
       </div>
     </div>

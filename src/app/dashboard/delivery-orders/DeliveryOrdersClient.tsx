@@ -38,12 +38,12 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div className="relative w-80">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-6">
+        <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
-            placeholder="Search DO Number or Deliver To..."
+            placeholder="Search PL Number or Deliver To..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-sm"
@@ -51,11 +51,107 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Mobile Card View */}
+      <div className="block md:hidden space-y-4">
+        {filtered.length === 0 ? (
+          <div className="py-12 text-center text-slate-400 bg-white rounded-2xl border border-slate-100">
+            <Package className="w-12 h-12 mx-auto mb-3 opacity-20" />
+            No outbound orders found.
+          </div>
+        ) : filtered.map((order) => (
+          <div key={order.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col gap-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="font-bold text-slate-800 text-base">{order.doNumber.replace('OTL-DO-', 'OTL-PL-')}</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1 mb-0.5">Deliver To</p>
+                <p className="text-sm font-semibold text-slate-700">{order.deliveryTicket?.deliverToName || order.customer.name}</p>
+              </div>
+              <div className="text-right flex flex-col items-end gap-1">
+                {(() => {
+                  const inProgress = ["draft", "picking"].includes(order.status);
+                  if (inProgress) {
+                    const totalRequired: number = order.deliveryTicket?.items?.reduce((s: number, i: any) => s + (i.delQtyPcs || 0), 0) || 0;
+                    
+                    if (totalRequired > 0) {
+                      const shippedItems = order.pickingItems?.filter((pi: any) => pi.status === "shipped") || [];
+                      const totalPicked: number = shippedItems.reduce((s: number, i: any) => s + (i.pickedQty ?? i.requiredQty ?? 0), 0);
+                      const pct = Math.min(100, Math.round((totalPicked / totalRequired) * 100));
+                      
+                      return (
+                        <div className="w-24 text-right">
+                          <span className="text-[10px] font-semibold text-slate-600">{pct}% Picked</span>
+                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-0.5">
+                            <div
+                              className={`h-full rounded-full transition-all ${pct === 0 ? "bg-slate-300" : "bg-gradient-to-r from-blue-400 to-indigo-500"}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    }
+                  }
+                  return (
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold text-white ${STATUS_COLOR[order.status] || "bg-slate-500"}`}>
+                      {STATUS_LABEL[order.status] || order.status}
+                    </span>
+                  );
+                })()}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Destination</p>
+                <p className="text-sm font-medium text-slate-700 line-clamp-1">{order.destination}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Picker</p>
+                <p className="text-sm font-medium text-slate-700">{order.picker?.fullName || "-"}</p>
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-center border-t border-slate-100 pt-3 mt-1">
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Items</p>
+                <p className="text-sm font-medium text-slate-700">{order.pickingItems.length} items</p>
+              </div>
+              
+              <div className="flex justify-end gap-2">
+                <Link
+                  href={`/dashboard/delivery-orders/${order.id}`}
+                  className="p-2.5 text-primary hover:bg-primary/10 rounded-xl transition-colors bg-primary/5 flex items-center justify-center"
+                >
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                {pendingDeleteIds.has(order.id) ? (
+                  <span className="p-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center">
+                    <Clock className="w-4 h-4" />
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setDeleteTarget(order);
+                      setDeleteReason("");
+                      setDeleteError("");
+                      setDeleteSuccess(false);
+                    }}
+                    className="p-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors bg-red-50 flex items-center justify-center"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto bg-white border border-slate-200 rounded-2xl shadow-sm">
         <table className="w-full text-left text-sm text-slate-600">
           <thead className="text-xs uppercase bg-slate-50 text-slate-500 border-y">
             <tr>
-              <th className="px-6 py-4 font-semibold">DO Number</th>
+              <th className="px-6 py-4 font-semibold">PL Number</th>
               <th className="px-6 py-4 font-semibold">Deliver To</th>
               <th className="px-6 py-4 font-semibold">Destination</th>
               <th className="px-6 py-4 font-semibold">Picker</th>
@@ -75,7 +171,7 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
             ) : (
               filtered.map((order) => (
                 <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-800">{order.doNumber}</td>
+                  <td className="px-6 py-4 font-medium text-slate-800">{order.doNumber.replace('OTL-DO-', 'OTL-PL-')}</td>
                   <td className="px-6 py-4">{order.deliveryTicket?.deliverToName || order.customer.name}</td>
                   <td className="px-6 py-4 max-w-[200px] truncate">{order.destination}</td>
                   <td className="px-6 py-4">{order.picker?.fullName || "-"}</td>
@@ -117,28 +213,17 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
                     })()}
                   </td>
                   <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
-                    {/* Print DT Omega */}
-                    <Link
-                      href={`/dashboard/print/dt-omega/${order.id}`}
-                      className="inline-flex items-center p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
-                      title="Print DT Omega"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Printer className="w-4 h-4" />
-                    </Link>
-
                     {/* Details */}
                     <Link
                       href={`/dashboard/delivery-orders/${order.id}`}
-                      className="inline-flex items-center p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
+                      className="inline-flex items-center p-3 sm:p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors"
                       title="Details"
                     >
                       <ArrowRight className="w-4 h-4" />
                     </Link>
 
                     {pendingDeleteIds.has(order.id) ? (
-                      <span className="inline-flex items-center p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200" title="Delete Pending">
+                      <span className="inline-flex items-center p-3 sm:p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200" title="Delete Pending">
                         <Clock className="w-4 h-4" />
                       </span>
                     ) : (
@@ -149,7 +234,7 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
                           setDeleteError("");
                           setDeleteSuccess(false);
                         }}
-                        className="inline-flex items-center p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="inline-flex items-center p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Pengajuan Delete"
                       >
                         <Trash2 className="w-4 h-4" />

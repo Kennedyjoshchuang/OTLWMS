@@ -142,7 +142,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-3">
           <Link
             href="/dashboard/delivery-tickets"
@@ -152,14 +152,14 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              DT {ticket.dtNumber}
+              PL {ticket.dtNumber}
             </h1>
             <p className="text-slate-500 text-sm mt-0.5">
               {ticket.customer.name} · {formatDate(ticket.createdAt)}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <span
             className={`px-3 py-1 rounded-full text-xs font-bold text-white ${
               STATUS_COLOR[ticket.status] || "bg-slate-400"
@@ -190,7 +190,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
             className="flex items-center gap-2 bg-slate-900 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-medium transition-all shadow-lg"
           >
             <Printer className="w-4 h-4" />
-            Print Omega DT
+            Print Omega Pick List
           </button>
         </div>
       </div>
@@ -223,7 +223,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
 
       {/* Tabs */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="flex border-b border-slate-200">
+        <div className="flex border-b border-slate-200 overflow-x-auto whitespace-nowrap">
           <button
             onClick={() => setActiveTab("omega")}
             className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-colors ${
@@ -233,7 +233,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
             }`}
           >
             <MapPin className="w-4 h-4" />
-            Omega Trust DT
+            Omega Pick List
             <span className="bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full ml-1">
               with Locations
             </span>
@@ -247,7 +247,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
             }`}
           >
             <FileText className="w-4 h-4" />
-            Jotun Source DT
+            Jotun Source Pick List
           </button>
         </div>
 
@@ -259,7 +259,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                 <MapPin className="w-4 h-4 text-emerald-600" />
               </div>
               <div>
-                <p className="font-bold text-slate-800">Omega Trust Delivery Ticket</p>
+                <p className="font-bold text-slate-800">Omega Pick List</p>
                 <p className="text-xs text-slate-500">
                   Warehouse locations automatically resolved · FIFO order
                 </p>
@@ -361,14 +361,14 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                   <h2 className="text-xl font-bold text-slate-800 mt-1">PT. JOTUN INDONESIA</h2>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-slate-500 uppercase font-semibold">DT Number</p>
+                  <p className="text-xs text-slate-500 uppercase font-semibold">Pick List Number</p>
                   <p className="font-bold text-slate-800 mt-1 border px-3 py-1 rounded-lg text-lg">
                     {ticket.dtNumber}
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-6 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
                 <div>
                   <p className="text-xs font-semibold text-slate-500 uppercase">Deliver To</p>
                   <p className="font-semibold text-slate-800 mt-1">{ticket.deliverToName || "-"}</p>
@@ -438,17 +438,17 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                     <Trash2 className="w-5 h-5 text-red-500" />
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-800">Request DT Deletion</h3>
+                    <h3 className="font-bold text-slate-800">Request Pick List Deletion</h3>
                     <p className="text-xs text-slate-500">Submit request to Owner for approval</p>
                   </div>
                 </div>
                 <div className="bg-slate-50 rounded-xl p-3 mb-4">
-                  <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-0.5">Delivery Ticket</p>
+                  <p className="text-xs text-slate-500 font-medium uppercase tracking-wide mb-0.5">Pick List</p>
                   <p className="font-mono text-sm font-bold text-slate-700">{ticket.dtNumber}</p>
                 </div>
                 <div className="mb-4 p-3 bg-yellow-50 border border-yellow-100 rounded-xl text-xs text-yellow-700 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>This request will be reviewed by the <strong>super admin (Owner)</strong>. If approved, this DT will be permanently deleted.</span>
+                  <span>This request will be reviewed by the <strong>super admin (Owner)</strong>. If approved, this Pick List will be permanently deleted.</span>
                 </div>
                 {deleteError && (
                   <div className="mb-4 flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">

@@ -14,8 +14,8 @@ export default function SettingsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">System Settings</h1>
-          <p className="text-slate-500 mt-1">Configure WMS preferences and users.</p>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-zinc-100">System Settings</h1>
+          <p className="text-slate-500 dark:text-zinc-400 mt-1">Configure WMS preferences and users.</p>
         </div>
       </div>
       
@@ -27,7 +27,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <h3 className="font-semibold text-slate-800">{s.title}</h3>
-              <p className="text-sm text-slate-500 mt-1">{s.desc}</p>
+              <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">{s.desc}</p>
             </div>
           </div>
         ))}

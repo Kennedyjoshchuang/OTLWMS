@@ -277,14 +277,13 @@ export default function DODetailClient({ data }: { data: PageData }) {
     <div className="max-w-5xl mx-auto p-6 space-y-6">
 
       {/* ── Header ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Link href="/dashboard/delivery-orders" className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">{order.doNumber}</h1>
-            <p className="text-slate-500 text-sm mt-0.5">{order.customer.name} · {order.destination}</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-zinc-100">{order.doNumber.replace('OTL-DO-', 'OTL-PL-')}</h1>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -372,7 +371,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
             <div key={item.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition-all ${itemDone ? "border-emerald-200 opacity-75" : "border-slate-200"}`}>
               {/* Item Header */}
               <div
-                className={`px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors ${itemDone ? "bg-emerald-50/50" : ""}`}
+                className={`px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer hover:bg-slate-50 transition-colors ${itemDone ? "bg-emerald-50/50" : ""}`}
                 onClick={() => setExpanded((p) => ({ ...p, [item.id]: !p[item.id] }))}
               >
                 <div className="flex items-center gap-3">
@@ -466,7 +465,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                   <div className="flex items-center justify-center gap-1.5">
                                     <button
                                       onClick={() => setQty(key, inputVal - 1, stock.availableQty)}
-                                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
+                                      className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
                                       disabled={inputVal <= 0}
                                     >
                                       −
@@ -482,7 +481,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                     />
                                     <button
                                       onClick={() => setQty(key, inputVal + 1, stock.availableQty)}
-                                      className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
+                                      className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
                                       disabled={inputVal >= stock.availableQty}
                                     >
                                       +
@@ -501,7 +500,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                   <button
                                     onClick={() => handlePick(item, stock)}
                                     disabled={isLoading || inputVal <= 0 || stock.availableQty === 0}
-                                    className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2 rounded-xl transition-all shadow-sm"
+                                    className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-3 sm:py-2 rounded-xl transition-all shadow-sm w-full sm:w-auto"
                                   >
                                     {isLoading ? (
                                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -568,7 +567,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                       <button
                         onClick={() => handleUnpick(si)}
                         disabled={unpickingId === si.id}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-1.5 rounded-xl transition-colors disabled:opacity-50"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-4 py-2.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors disabled:opacity-50"
                         title="Batalkan picking & kembalikan stok"
                       >
                         {unpickingId === si.id
