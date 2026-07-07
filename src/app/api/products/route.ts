@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 // GET /api/products — list products (optional ?customerId= & ?search=)
 export async function GET(req: NextRequest) {
@@ -84,6 +85,9 @@ export async function POST(req: NextRequest) {
       },
       include: { customer: { select: { id: true, name: true, code: true } } },
     });
+
+    // Invalidate next.js client-side router cache for the dashboard
+    revalidatePath("/dashboard", "layout");
 
     return NextResponse.json(product, { status: 201 });
   } catch (error: any) {

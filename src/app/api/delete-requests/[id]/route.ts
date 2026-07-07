@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 // PATCH /api/delete-requests/[id] — approve or reject (super_admin only)
 export async function PATCH(
@@ -142,6 +143,9 @@ export async function PATCH(
       where: { id },
       data: { status: "deleted", reviewNote: reviewNote?.trim() || null, updatedAt: new Date() },
     });
+
+    // Invalidate next.js client-side router cache for the dashboard
+    revalidatePath("/dashboard", "layout");
 
     return NextResponse.json(updated);
   } catch (error: any) {

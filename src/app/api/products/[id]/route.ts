@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 // PATCH /api/products/[id] — update product fields
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,22 +47,48 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       );
     }
 
-    const updated = await prisma.product.update({
-      where: { id },
-      data: {
-        productCode: productCode.trim().toUpperCase(),
-        productName: productName.trim(),
-        paintType: paintType?.trim() || null,
-        colorName: colorName?.trim() || null,
-        colorCode: colorCode?.trim() || null,
-        sizeLiter: sizeLiter !== undefined && sizeLiter !== "" ? Number(sizeLiter) : null,
-        weightKg: weightKg !== undefined && weightKg !== "" ? Number(weightKg) : null,
-        barcode: barcode?.trim() || null,
-        unit: unit?.trim() || "pcs",
-        isActive: isActive !== undefined ? Boolean(isActive) : undefined,
-      },
-      include: { customer: { select: { id: true, name: true, code: true } } },
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Update the product itself
+      const prod = await tx.product.update({
+        where: { id },
+        data: {
+          productCode: productCode.trim().toUpperCase(),
+          productName: productName.trim(),
+          paintType: paintType?.trim() || null,
+          colorName: colorName?.trim() || null,
+          colorCode: colorCode?.trim() || null,
+          sizeLiter: sizeLiter !== undefined && sizeLiter !== "" ? Number(sizeLiter) : null,
+          weightKg: weightKg !== undefined && weightKg !== "" ? Number(weightKg) : null,
+          barcode: barcode?.trim() || null,
+          unit: unit?.trim() || "pcs",
+          isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+        },
+        include: { customer: { select: { id: true, name: true, code: true } } },
+      });
+
+      // 2. Sync to related PackingListItems
+      await tx.packingListItem.updateMany({
+        where: { productId: id },
+        data: {
+          productCode: prod.productCode,
+          productName: prod.productName,
+        },
+      });
+
+      // 3. Sync to related DeliveryTicketItems
+      await tx.deliveryTicketItem.updateMany({
+        where: { productId: id },
+        data: {
+          productCode: prod.productCode,
+          productName: prod.productName,
+        },
+      });
+
+      return prod;
     });
+
+    // Invalidate next.js client-side router cache for the dashboard
+    revalidatePath("/dashboard", "layout");
 
     return NextResponse.json(updated);
   } catch (error: any) {
@@ -84,6 +111,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
       where: { id },
       data: { isActive: false },
     });
+
+    // Invalidate next.js client-side router cache for the dashboard
+    revalidatePath("/dashboard", "layout");
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
