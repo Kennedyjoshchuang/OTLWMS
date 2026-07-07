@@ -133,8 +133,16 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               className="p-2 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors"
+              title="Toggle Theme"
             >
               {mounted && theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <button
+              onClick={() => signOut()}
+              className="p-2 ml-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+              title={t('nav.logout')}
+            >
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
         </header>
