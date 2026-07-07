@@ -30,7 +30,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   // Edit Mode state
   const [isEditing, setIsEditing] = useState(false);
   const [editRackName, setEditRackName] = useState("");
-  const [editLevelAliases, setEditLevelAliases] = useState<Record<string, string>>({});
+  const [editPositionCodes, setEditPositionCodes] = useState<Record<string, string>>({});
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -84,19 +84,13 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     const { rack } = getCellData(selectedCell.rackCode, selectedCell.rowNumber);
     if (!rack) return;
     setEditRackName(rack.rackName);
-    let aliases: Record<string, string> = {};
-    if (rack.levelAliases) {
-      try {
-        aliases = typeof rack.levelAliases === "string" ? JSON.parse(rack.levelAliases) : rack.levelAliases;
-      } catch (e) {
-        aliases = {};
-      }
-    }
-    const initialAliases: Record<string, string> = {};
-    for (let i = 1; i <= rack.totalLevels; i++) {
-      initialAliases[String(i)] = aliases[String(i)] || "";
-    }
-    setEditLevelAliases(initialAliases);
+    
+    // Initialize position code inputs for each position in this cell
+    const initialPosCodes: Record<string, string> = {};
+    selectedCell.positions.forEach(pos => {
+      initialPosCodes[pos.id] = pos.positionCode;
+    });
+    setEditPositionCodes(initialPosCodes);
     setEditError("");
     setIsEditing(true);
   };
@@ -108,24 +102,63 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     setIsSavingEdit(true);
     setEditError("");
     try {
-      const res = await fetch(`/api/warehouse/racks/${rack.id}`, {
+      // 1. Update Rack Name
+      if (editRackName !== rack.rackName) {
+        const resRack = await fetch(`/api/warehouse/racks/${rack.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rackName: editRackName }),
+        });
+        if (!resRack.ok) throw new Error("Failed to update rack name.");
+      }
+
+      // 2. Update Position Codes
+      const positionsToUpdate = Object.keys(editPositionCodes).map(id => ({
+        id,
+        positionCode: editPositionCodes[id]
+      }));
+      
+      const resPos = await fetch(`/api/warehouse/positions`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          rackName: editRackName,
-          levelAliases: editLevelAliases,
-        }),
+        body: JSON.stringify({ positions: positionsToUpdate }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update rack.");
+      if (!resPos.ok) {
+        const errorData = await resPos.json();
+        throw new Error(errorData.error || "Failed to update position numbering.");
+      }
 
       setRacks((prev) =>
-        prev.map((r) =>
-          r.id === rack.id
-            ? { ...r, rackName: data.rackName, levelAliases: data.levelAliases }
-            : r
-        )
+        prev.map((r) => {
+          if (r.id === rack.id) {
+            return {
+              ...r,
+              rackName: editRackName,
+              positions: r.positions.map((p: any) => {
+                if (editPositionCodes[p.id]) {
+                  return { ...p, positionCode: editPositionCodes[p.id] };
+                }
+                return p;
+              })
+            };
+          }
+          return r;
+        })
       );
+      
+      // Update the selectedCell state so UI refreshes without closing
+      setSelectedCell(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          positions: prev.positions.map(p => {
+            if (editPositionCodes[p.id]) {
+              return { ...p, positionCode: editPositionCodes[p.id] };
+            }
+            return p;
+          })
+        };
+      });
       
       setIsEditing(false);
     } catch (err: any) {
@@ -382,43 +415,43 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       
       {/* ─── STATISTICS / KPI CARDS ──────────────────────────────── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
-          <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl">
-            <Layers className="w-6 h-6" />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-2.5 sm:p-3 bg-indigo-50 text-indigo-600 rounded-xl">
+            <Layers className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Capacity</p>
-            <h3 className="text-2xl font-bold text-slate-800">{stats.total} PP</h3>
+            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider line-clamp-1">Total Capacity</p>
+            <h3 className="text-lg sm:text-2xl font-bold text-slate-800">{stats.total} PP</h3>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
-          <div className="p-3 bg-red-50 text-red-600 rounded-xl">
-            <Package className="w-6 h-6" />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-2.5 sm:p-3 bg-red-50 text-red-600 rounded-xl">
+            <Package className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Occupied</p>
-            <h3 className="text-2xl font-bold text-slate-800">{stats.occupied} PP</h3>
+            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider line-clamp-1">Occupied</p>
+            <h3 className="text-lg sm:text-2xl font-bold text-slate-800">{stats.occupied} PP</h3>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
-          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-            <CheckCircle2 className="w-6 h-6" />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-2.5 sm:p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+            <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Available</p>
-            <h3 className="text-2xl font-bold text-slate-800">{stats.available} PP</h3>
+            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider line-clamp-1">Available</p>
+            <h3 className="text-lg sm:text-2xl font-bold text-slate-800">{stats.available} PP</h3>
           </div>
         </div>
 
-        <div className="bg-white p-5 rounded-2xl border shadow-sm flex items-center gap-4 transition-all hover:scale-[1.02]">
-          <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-            <Activity className="w-6 h-6" />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 transition-all hover:scale-[1.02]">
+          <div className="p-2.5 sm:p-3 bg-amber-50 text-amber-600 rounded-xl">
+            <Activity className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Liters</p>
-            <h3 className="text-2xl font-bold text-slate-800">
+            <p className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider line-clamp-1">Total Liters</p>
+            <h3 className="text-lg sm:text-2xl font-bold text-slate-800">
               {stats.totalLiters.toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
             </h3>
           </div>
@@ -796,8 +829,8 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
             isEditing ? (
               <div className="space-y-5">
                 <div className="flex items-center justify-between border-b pb-2 mb-2">
-                  <h3 className="text-sm font-bold text-slate-700">Edit Rack & Level Names</h3>
-                  <span className="text-xs text-slate-400 font-mono">ID: {getCellData(selectedCell.rackCode, selectedCell.rowNumber).rack?.id}</span>
+                  <h3 className="text-sm font-bold text-slate-700">Edit Names & Numbering</h3>
+                  <span className="text-xs text-slate-400 font-mono">Row: {String(selectedCell.rowNumber).padStart(2, '0')}</span>
                 </div>
 
                 {editError && (
@@ -821,33 +854,36 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                   />
                 </div>
 
-                {/* Level / Tier Names */}
+                {/* Position Codes */}
                 <div className="space-y-3.5">
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide border-b pb-1">
-                    Level / Tier Aliases
+                    Pallet Position Numbering (Code)
                   </label>
                   <div className="grid grid-cols-2 gap-3">
-                    {Object.keys(editLevelAliases)
-                      .sort((a, b) => Number(a) - Number(b))
-                      .map((lvl) => (
-                        <div key={lvl} className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
-                          <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                            Level {lvl} Label
-                          </label>
-                          <input
-                            type="text"
-                            value={editLevelAliases[lvl]}
-                            onChange={(e) =>
-                              setEditLevelAliases((prev) => ({
-                                ...prev,
-                                [lvl]: e.target.value,
-                              }))
-                            }
-                            placeholder={`e.g. Tier ${lvl}`}
-                            className="w-full border rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-primary outline-none"
-                          />
-                        </div>
-                      ))}
+                    {[...selectedCell.positions]
+                      .sort((a, b) => b.levelNumber - a.levelNumber)
+                      .map((pos) => {
+                        const levelName = getLevelName(getCellData(selectedCell.rackCode, selectedCell.rowNumber).rack, pos.levelNumber);
+                        return (
+                          <div key={pos.id} className="bg-slate-50/50 p-2.5 rounded-xl border border-slate-100">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                              {levelName}
+                            </label>
+                            <input
+                              type="text"
+                              value={editPositionCodes[pos.id] || ""}
+                              onChange={(e) =>
+                                setEditPositionCodes((prev) => ({
+                                  ...prev,
+                                  [pos.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="Position Code"
+                              className="w-full border rounded-lg px-2.5 py-1.5 text-xs bg-white focus:ring-2 focus:ring-primary outline-none font-mono"
+                            />
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
 
@@ -918,10 +954,10 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                           <div className="flex flex-wrap gap-2 justify-between items-center border-b pb-1.5 border-slate-200/50">
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded shadow-sm">
-                                {levelName}
+                                {pos.positionCode}
                               </span>
                               <span className="text-[10px] font-mono text-slate-400">
-                                {pos.positionCode}
+                                {levelName}
                               </span>
                             </div>
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
