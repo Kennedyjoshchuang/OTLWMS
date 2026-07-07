@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2 } from "lucide-react";
+import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw } from "lucide-react";
 
 interface WarehouseMapClientProps {
   initialRacks: any[];
@@ -34,6 +34,33 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [editError, setEditError] = useState("");
 
+  // Fetching & sync state
+  const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState("");
+
+  const fetchLayout = useCallback(async (showLoader = true) => {
+    if (showLoader) setIsLoading(true);
+    setFetchError("");
+    try {
+      const res = await fetch("/api/warehouse/layout");
+      if (!res.ok) {
+        throw new Error("Failed to fetch latest warehouse layout.");
+      }
+      const data = await res.json();
+      setRacks(data);
+    } catch (err: any) {
+      console.error("Error fetching warehouse layout:", err);
+      setFetchError(err.message || "Failed to load layout.");
+    } finally {
+      if (showLoader) setIsLoading(false);
+    }
+  }, []);
+
+  // Fetch layout on mount to ensure we have the latest synced product data
+  useEffect(() => {
+    fetchLayout(true);
+  }, [fetchLayout]);
+
   // 1. Calculate Warehouse Statistics
   const stats = useMemo(() => {
     let total = 0;
@@ -44,7 +71,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       occupied += rack.positions.filter((p: any) => p.isOccupied).length;
       rack.positions.forEach((p: any) => {
         p.stockLedgers.forEach((sl: any) => {
-          totalLiters += sl.quantityLiter || 0;
+          totalLiters += sl.quantity * (sl.product?.sizeLiter || 0);
         });
       });
     });
@@ -161,6 +188,8 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       });
       
       setIsEditing(false);
+      // Fetch latest layout in the background to ensure absolute sync with backend
+      fetchLayout(false);
     } catch (err: any) {
       setEditError(err.message || "Failed to save changes.");
     } finally {
@@ -459,16 +488,33 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       </div>
 
       {/* ─── TOOLBAR & SEARCH ────────────────────────────────────── */}
+      {fetchError && (
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-xl text-sm flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-500" />
+          <span>{fetchError}</span>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-stretch sm:items-center mb-6">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Search product code, batch, or position..." 
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none text-sm font-medium"
-          />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search product code, batch, or position..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none text-sm font-medium dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-100"
+            />
+          </div>
+          <button
+            onClick={() => fetchLayout(true)}
+            disabled={isLoading}
+            className="p-2.5 bg-white dark:bg-zinc-900 border dark:border-zinc-800 rounded-xl shadow-sm text-slate-600 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-zinc-850 disabled:opacity-50 transition-all flex items-center justify-center shrink-0"
+            title="Sync/Refresh Map Data"
+          >
+            <RefreshCw className={`w-4.5 h-4.5 ${isLoading ? "animate-spin text-indigo-600" : ""}`} />
+          </button>
         </div>
         
         {/* Color Legend */}
@@ -982,7 +1028,9 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="font-medium text-slate-500">Volume:</span>
-                                  <span className="font-bold text-slate-600">{pos.stockLedgers[0].quantityLiter} L</span>
+                                  <span className="font-bold text-slate-600">
+                                    {(pos.stockLedgers[0].quantity * (pos.stockLedgers[0].product?.sizeLiter || 0)).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
+                                  </span>
                                 </div>
                                 <div className="flex justify-between border-t pt-1 mt-1 text-[10px]">
                                   <span className="text-slate-400">Batch:</span>
