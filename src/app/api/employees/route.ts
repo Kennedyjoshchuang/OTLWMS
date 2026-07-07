@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     const validRoles = [
       "super_admin", "warehouse_admin", "checker_inbound", "picker", "driver", "customer_viewer",
       "inbound_staff", "outbound_staff", "picklist_staff", "delivery_staff",
-      "hr_staff", "product_staff", "billing_staff", "report_staff", "warehouse_staff",
+      "hr_staff", "product_staff", "billing_staff", "report_staff", "warehouse_staff", "analytics",
     ];
     if (!validRoles.includes(role)) {
       return NextResponse.json({ error: "Invalid role." }, { status: 400 });

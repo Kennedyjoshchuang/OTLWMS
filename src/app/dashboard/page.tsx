@@ -14,7 +14,7 @@ const roleRoutes = [
   { href: "/dashboard/delivery-orders", roles: ["super_admin", "warehouse_admin", "picker", "outbound_staff"] },
   { href: "/dashboard/deliveries", roles: ["super_admin", "warehouse_admin", "driver", "delivery_staff"] },
   { href: "/dashboard/employees", roles: ["super_admin", "warehouse_admin", "hr_staff"] },
-  { href: "/dashboard/analytics", roles: ["super_admin", "warehouse_admin", "report_staff"] },
+  { href: "/dashboard/analytics", roles: ["super_admin", "warehouse_admin", "report_staff", "analytics"] },
   { href: "/dashboard/reports", roles: ["super_admin", "warehouse_admin", "customer_viewer", "report_staff"] },
   { href: "/dashboard/settings", roles: ["super_admin"] },
   { href: "/dashboard/delete-requests", roles: ["super_admin"] },

@@ -24,6 +24,7 @@ const ROLES = [
   { value: "driver",          label: "Driver",             color: "bg-emerald-100 text-emerald-700 border-emerald-200", pages: ["Deliveries"] },
   { value: "customer_viewer", label: "Customer Viewer",    color: "bg-slate-100 text-slate-700 border-slate-200",    pages: ["Outbound (read-only)", "Reports (read-only)", "Billing (read-only)"] },
   { value: "super_admin",     label: "Owner / Super Admin", color: "bg-rose-100 text-rose-700 border-rose-200",     pages: ["Semua Halaman", "Owner Page", "Settings"] },
+  { value: "analytics",       label: "Analytics Staff",     color: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200", pages: ["Analytics"] },
 ];
 
 function getRoleInfo(value: string) {

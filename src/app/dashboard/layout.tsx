@@ -47,7 +47,7 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     { name: "nav.outbound", title: "Outbound", href: "/dashboard/delivery-orders", icon: Package, roles: ["super_admin", "warehouse_admin", "picker", "outbound_staff"] },
     { name: "nav.deliveries", title: "Deliveries", href: "/dashboard/deliveries", icon: Truck, roles: ["super_admin", "warehouse_admin", "driver", "delivery_staff"] },
     { name: "nav.employees", title: "Employees", href: "/dashboard/employees", icon: Users, roles: ["super_admin", "warehouse_admin", "hr_staff"] },
-    { name: "nav.analytics", title: "Analytics", href: "/dashboard/analytics", icon: BarChart2, roles: ["super_admin", "warehouse_admin", "report_staff"] },
+    { name: "nav.analytics", title: "Analytics", href: "/dashboard/analytics", icon: BarChart2, roles: ["super_admin", "warehouse_admin", "report_staff", "analytics"] },
     { name: "nav.kpi", title: "KPI", href: "/dashboard/reports", icon: FileText, roles: ["super_admin", "warehouse_admin", "customer_viewer", "report_staff"] },
     { name: "nav.settings", title: "Settings", href: "/dashboard/settings", icon: Settings, roles: ["super_admin"] },
     { name: "nav.owner", title: "Owner Page", href: "/dashboard/delete-requests", icon: ShieldCheck, roles: ["super_admin"] },

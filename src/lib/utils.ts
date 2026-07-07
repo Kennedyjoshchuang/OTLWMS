@@ -106,4 +106,5 @@ export const ROLE_LABEL: Record<string, string> = {
   billing_staff: 'Billing & Invoices',
   report_staff: 'Reports',
   warehouse_staff: 'Warehouse Map',
+  analytics: 'Analytics Staff',
 }

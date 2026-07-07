@@ -15,7 +15,7 @@ model User {
   passwordHash String
   fullName     String
   phone        String?
-  role         String   // super_admin | warehouse_admin | checker_inbound | picker | driver | customer_viewer
+  role         String   // super_admin | warehouse_admin | checker_inbound | picker | driver | customer_viewer | analytics | etc
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
