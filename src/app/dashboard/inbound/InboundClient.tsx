@@ -193,9 +193,10 @@ export default function InboundClient({
         const occupied = positions.filter((p: any) => p.isOccupied).length;
         const total = positions.length;
         const isFull = total > 0 && occupied >= total;
+        const posCode = positions[0]?.positionCode || `Tier ${levelNumber}`;
         return {
           value: levelNumber,
-          label: `Tier ${levelNumber} — ${totalLiter.toFixed(1)} L loaded${isFull ? " (FULL)" : ""}`,
+          label: `${posCode} — ${totalLiter.toFixed(1)} L loaded${isFull ? " (FULL)" : ""}`,
           isDisabled: isFull,
         };
       });
