@@ -108,3 +108,69 @@ export const ROLE_LABEL: Record<string, string> = {
   warehouse_staff: 'Warehouse Map',
   analytics: 'Analytics Staff',
 }
+
+export const DEFAULT_ROLE_PAGES: Record<string, string[]> = {
+  inbound_staff: ["/dashboard/inbound"],
+  outbound_staff: ["/dashboard/delivery-orders"],
+  picklist_staff: ["/dashboard/delivery-tickets"],
+  delivery_staff: ["/dashboard/deliveries"],
+  hr_staff: ["/dashboard/employees"],
+  product_staff: ["/dashboard/products"],
+  billing_staff: ["/dashboard/invoices"],
+  report_staff: ["/dashboard/reports"],
+  warehouse_staff: ["/dashboard/warehouse"],
+  warehouse_admin: [
+    "/dashboard/inbound",
+    "/dashboard/products",
+    "/dashboard/warehouse",
+    "/dashboard/delivery-tickets",
+    "/dashboard/invoices",
+    "/dashboard/delivery-orders",
+    "/dashboard/deliveries",
+    "/dashboard/employees",
+    "/dashboard/reports",
+    "/dashboard/settings",
+  ],
+  checker_inbound: ["/dashboard/inbound", "/dashboard/warehouse"],
+  picker: ["/dashboard/delivery-tickets", "/dashboard/delivery-orders", "/dashboard/warehouse"],
+  driver: ["/dashboard/deliveries"],
+  customer_viewer: ["/dashboard/delivery-orders", "/dashboard/reports", "/dashboard/invoices"],
+  super_admin: [
+    "/dashboard/inbound",
+    "/dashboard/products",
+    "/dashboard/warehouse",
+    "/dashboard/delivery-tickets",
+    "/dashboard/invoices",
+    "/dashboard/delivery-orders",
+    "/dashboard/deliveries",
+    "/dashboard/employees",
+    "/dashboard/analytics",
+    "/dashboard/reports",
+    "/dashboard/settings",
+    "/dashboard/delete-requests",
+  ],
+  analytics: ["/dashboard/analytics"],
+}
+
+export function getPagesForUser(user: { role: string; allowedPages?: string[] | null }) {
+  if (user.role === "super_admin") {
+    return DEFAULT_ROLE_PAGES.super_admin;
+  }
+  if (user.allowedPages && user.allowedPages.length > 0) {
+    return user.allowedPages;
+  }
+  return DEFAULT_ROLE_PAGES[user.role] || [];
+}
+
+export function hasWriteAccess(user: { role: string; readWritePages?: string[] | null }, pagePath: string): boolean {
+  if (user.role === "super_admin") {
+    return true;
+  }
+  if (user.readWritePages && user.readWritePages.length > 0) {
+    return user.readWritePages.includes(pagePath);
+  }
+  if (user.role === "customer_viewer") {
+    return false;
+  }
+  return true;
+}

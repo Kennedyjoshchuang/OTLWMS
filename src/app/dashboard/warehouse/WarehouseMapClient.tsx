@@ -27,6 +27,12 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
 
   const [search, setSearch] = useState("");
 
+  const getDisplayRowNumber = (rackCode: string, dbRowNumber: number) => {
+    if (rackCode === "FLOOR") return dbRowNumber;
+    if (rackCode === "E") return 17 - dbRowNumber;
+    return 15 - dbRowNumber;
+  };
+
   // Edit Mode state
   const [isEditing, setIsEditing] = useState(false);
   const [editRackName, setEditRackName] = useState("");
@@ -653,7 +659,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                     fill="#475569"
                     className="select-none pointer-events-none opacity-60"
                   >
-                    {cell.rowNumber}
+                    {getDisplayRowNumber(cell.rackCode, cell.rowNumber)}
                   </text>
                 </g>
               );
@@ -730,7 +736,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                   {(() => {
                     const { rack } = getCellData(hoveredCell.rackCode, hoveredCell.rowNumber);
                     return rack ? rack.rackName : (hoveredCell.rackCode === "FLOOR" ? "Floor Position" : `Rack ${hoveredCell.rackCode}`);
-                  })()} - Row {String(hoveredCell.rowNumber).padStart(2, '0')}
+                  })()} - Row {String(getDisplayRowNumber(hoveredCell.rackCode, hoveredCell.rowNumber)).padStart(2, '0')}
                 </span>
                 <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">
                   {hoveredCell.positions.length} Lvl
@@ -854,7 +860,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                 <span className="truncate">
                   {selectedCell && (
                     <>
-                      {getCellData(selectedCell.rackCode, selectedCell.rowNumber).rack?.rackName || (selectedCell.rackCode === "FLOOR" ? "Floor Storage" : `Rack ${selectedCell.rackCode}`)} - Row {String(selectedCell.rowNumber).padStart(2, '0')}
+                      {getCellData(selectedCell.rackCode, selectedCell.rowNumber).rack?.rackName || (selectedCell.rackCode === "FLOOR" ? "Floor Storage" : `Rack ${selectedCell.rackCode}`)} - Row {String(getDisplayRowNumber(selectedCell.rackCode, selectedCell.rowNumber)).padStart(2, '0')}
                     </>
                   )}
                 </span>
@@ -876,7 +882,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
               <div className="space-y-5">
                 <div className="flex items-center justify-between border-b pb-2 mb-2">
                   <h3 className="text-sm font-bold text-slate-700">Edit Names & Numbering</h3>
-                  <span className="text-xs text-slate-400 font-mono">Row: {String(selectedCell.rowNumber).padStart(2, '0')}</span>
+                  <span className="text-xs text-slate-400 font-mono">Row: {String(getDisplayRowNumber(selectedCell.rackCode, selectedCell.rowNumber)).padStart(2, '0')}</span>
                 </div>
 
                 {editError && (
@@ -1001,9 +1007,6 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                             <div className="flex items-center gap-2">
                               <span className="text-xs font-extrabold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded shadow-sm">
                                 {pos.positionCode}
-                              </span>
-                              <span className="text-[10px] font-mono text-slate-400">
-                                {levelName}
                               </span>
                             </div>
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${

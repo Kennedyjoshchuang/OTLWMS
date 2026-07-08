@@ -4,7 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import CreatableSelect from "react-select/creatable";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
+import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess } from "@/lib/utils";
+import { useSession } from "next-auth/react";
 import {
   Search, Eye, ArrowRight, Loader2, FileUp, FileText,
   CheckCircle2, AlertCircle, Receipt, MapPin, X, Clock, Trash2, MessageSquare, AlertTriangle
@@ -31,6 +32,9 @@ const SIMULATED_OCR = {
 
 export default function DeliveryTicketsClient({ initialTickets, customers = [] }: { initialTickets: any[]; customers?: any[] }) {
   const router = useRouter();
+  const { data: session } = useSession();
+  const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/delivery-tickets") : false;
+
   const [tickets, setTickets] = useState(initialTickets);
   const [selectedCustomerId, setSelectedCustomerId] = useState(customers?.[0]?.id || "");
   const [additionalCustomers, setAdditionalCustomers] = useState<any[]>([]);
@@ -280,13 +284,15 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
             className="w-full pl-9 pr-4 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-sm"
           />
         </div>
-        <button
-          onClick={handleStartUpload}
-          className="flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 w-full sm:w-auto"
-        >
-          <FileUp className="w-5 h-5" />
-          Upload Pick List
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleStartUpload}
+            className="flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 w-full sm:w-auto"
+          >
+            <FileUp className="w-5 h-5" />
+            Upload Pick List
+          </button>
+        )}
       </div>
 
       {/* Mobile Card View */}
@@ -333,34 +339,38 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
               >
                 <Eye className="w-4 h-4 mr-1.5" /> <span className="text-xs font-semibold">View</span>
               </Link>
-              <button
-                onClick={() => handleCreateDO(ticket.id)}
-                disabled={creatingDO === ticket.id}
-                className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors bg-indigo-50 disabled:opacity-50 flex items-center justify-center flex-1"
-              >
-                {creatingDO === ticket.id ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <><ArrowRight className="w-4 h-4 mr-1.5" /> <span className="text-xs font-semibold">Create DO</span></>
-                )}
-              </button>
-              {pendingDeleteIds.has(ticket.id) ? (
-                <span className="p-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center px-4" title="Delete Pending">
-                  <Clock className="w-4 h-4" />
-                </span>
-              ) : (
-                <button
-                  onClick={() => {
-                    setDeleteTarget(ticket);
-                    setDeleteReason("");
-                    setDeleteError("");
-                    setDeleteSuccess(false);
-                  }}
-                  className="p-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors bg-red-50 flex items-center justify-center px-4"
-                  title="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+              {canWrite && (
+                <>
+                  <button
+                    onClick={() => handleCreateDO(ticket.id)}
+                    disabled={creatingDO === ticket.id}
+                    className="p-2.5 text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors bg-indigo-50 disabled:opacity-50 flex items-center justify-center flex-1"
+                  >
+                    {creatingDO === ticket.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <><ArrowRight className="w-4 h-4 mr-1.5" /> <span className="text-xs font-semibold">Create DO</span></>
+                    )}
+                  </button>
+                  {pendingDeleteIds.has(ticket.id) ? (
+                    <span className="p-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center px-4" title="Delete Pending">
+                      <Clock className="w-4 h-4" />
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setDeleteTarget(ticket);
+                        setDeleteReason("");
+                        setDeleteError("");
+                        setDeleteSuccess(false);
+                      }}
+                      className="p-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors bg-red-50 flex items-center justify-center px-4"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -417,35 +427,41 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                   >
                     <Eye className="w-4 h-4" />
                   </Link>
-                  <button
-                    onClick={() => handleCreateDO(ticket.id)}
-                    disabled={creatingDO === ticket.id}
-                    className="p-3 sm:p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors ml-2 disabled:opacity-50 inline-flex items-center"
-                    title="Create DO & Go to Outbound"
-                  >
-                    {creatingDO === ticket.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <ArrowRight className="w-4 h-4" />
-                    )}
-                  </button>
-                  {pendingDeleteIds.has(ticket.id) ? (
-                    <span className="inline-flex items-center gap-1.5 p-3 sm:p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 ml-2" title="Delete Pending">
-                      <Clock className="w-4 h-4" />
-                    </span>
+                  {canWrite ? (
+                    <>
+                      <button
+                        onClick={() => handleCreateDO(ticket.id)}
+                        disabled={creatingDO === ticket.id}
+                        className="p-3 sm:p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors ml-2 disabled:opacity-50 inline-flex items-center"
+                        title="Create DO & Go to Outbound"
+                      >
+                        {creatingDO === ticket.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ArrowRight className="w-4 h-4" />
+                        )}
+                      </button>
+                      {pendingDeleteIds.has(ticket.id) ? (
+                        <span className="inline-flex items-center gap-1.5 p-3 sm:p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 ml-2" title="Delete Pending">
+                          <Clock className="w-4 h-4" />
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setDeleteTarget(ticket);
+                            setDeleteReason("");
+                            setDeleteError("");
+                            setDeleteSuccess(false);
+                          }}
+                          className="p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-2 inline-flex items-center"
+                          title="Pengajuan Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </>
                   ) : (
-                    <button
-                      onClick={() => {
-                        setDeleteTarget(ticket);
-                        setDeleteReason("");
-                        setDeleteError("");
-                        setDeleteSuccess(false);
-                      }}
-                      className="p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-2 inline-flex items-center"
-                      title="Pengajuan Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <span className="text-xs text-slate-400 italic ml-2">Read-Only</span>
                   )}
                 </td>
               </tr>

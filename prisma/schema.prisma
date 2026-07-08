@@ -17,6 +17,8 @@ model User {
   phone        String?
   role         String   // super_admin | warehouse_admin | checker_inbound | picker | driver | customer_viewer | analytics | etc
   isActive     Boolean  @default(true)
+  allowedPages   String[] @default([])
+  readWritePages String[] @default([])
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

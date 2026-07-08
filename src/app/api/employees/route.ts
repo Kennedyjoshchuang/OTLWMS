@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
@@ -23,7 +25,17 @@ async function generateEmail(fullName: string, role: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { fullName, password, role, phone } = await req.json();
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const currentUserRole = (session.user as any)?.role;
+    if (currentUserRole !== "super_admin") {
+      return NextResponse.json({ error: "Forbidden — only super_admin can create employees." }, { status: 403 });
+    }
+
+    const { fullName, password, role, phone, allowedPages, readWritePages } = await req.json();
 
     if (!fullName || !password || !role) {
       return NextResponse.json({ error: "fullName, password, and role are required." }, { status: 400 });
@@ -51,6 +63,8 @@ export async function POST(req: NextRequest) {
         role,
         phone: phone || null,
         isActive: true,
+        allowedPages: allowedPages || [],
+        readWritePages: readWritePages || [],
       },
       select: {
         id: true,
@@ -59,6 +73,8 @@ export async function POST(req: NextRequest) {
         role: true,
         phone: true,
         isActive: true,
+        allowedPages: true,
+        readWritePages: true,
         createdAt: true,
       },
     });

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
+import { getPagesForUser } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -27,9 +28,13 @@ export default async function DashboardPage() {
     redirect('/login')
   }
 
-  const role = (session.user as any)?.role
+  const user = session.user as any
+  const role = user.role
+  const userPages = getPagesForUser(user)
 
-  const firstAllowedRoute = roleRoutes.find(r => r.roles.includes(role))
+  // Find the first allowed route
+  const allowedHrefs = userPages.length > 0 ? userPages : roleRoutes.filter(r => r.roles.includes(role)).map(r => r.href)
+  const firstAllowedRoute = roleRoutes.find(r => allowedHrefs.includes(r.href))
   
   if (firstAllowedRoute) {
     redirect(firstAllowedRoute.href)

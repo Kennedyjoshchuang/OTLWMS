@@ -232,7 +232,12 @@ export async function GET(request: Request) {
       const p = sl.product;
       const pos = sl.palletPosition;
       const rack = pos.rack;
-      const locStr = `Rack ${rack.rackName} - Tier ${pos.levelNumber}`;
+      
+      const rackName = rack.rackCode === 'FLOOR' ? 'Floor' : rack.rackCode;
+      const rowName = String(pos.rowNumber).padStart(2, '0');
+      const levelName = String(pos.levelNumber).padStart(2, '0');
+      const tierName = `Tier ${rack.rackCode}-${rowName}${levelName}`;
+      const locStr = `${rackName}${rowName} - ${tierName}`;
       
       const key = `${p.id}-${pos.id}`;
       if (!stockMap.has(key)) {

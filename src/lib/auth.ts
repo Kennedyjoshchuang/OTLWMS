@@ -37,7 +37,14 @@ export const authOptions: NextAuthOptions = {
         for (const user of candidates) {
           if (!user.isActive) continue;
           const valid = bcrypt.compareSync(credentials.password, user.passwordHash);
-          if (valid) return { id: user.id, email: user.email, name: user.fullName, role: user.role };
+          if (valid) return { 
+            id: user.id, 
+            email: user.email, 
+            name: user.fullName, 
+            role: user.role, 
+            allowedPages: user.allowedPages || [], 
+            readWritePages: user.readWritePages || [] 
+          };
         }
 
         return null;
@@ -46,13 +53,20 @@ export const authOptions: NextAuthOptions = {
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) { token.role = (user as any).role; token.id = user.id }
+      if (user) { 
+        token.role = (user as any).role; 
+        token.id = user.id;
+        token.allowedPages = (user as any).allowedPages;
+        token.readWritePages = (user as any).readWritePages;
+      }
       return token
     },
     async session({ session, token }) {
       if (session.user) {
         (session.user as any).role = token.role;
-        (session.user as any).id   = token.id
+        (session.user as any).id   = token.id;
+        (session.user as any).allowedPages = token.allowedPages;
+        (session.user as any).readWritePages = token.readWritePages;
       }
       return session
     },

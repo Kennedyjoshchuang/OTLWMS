@@ -21,7 +21,8 @@ import {
   MessageSquare,
   AlertTriangle,
 } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate, hasWriteAccess } from "@/lib/utils";
+import { useSession } from "next-auth/react";
 
 interface Invoice {
   id: string;
@@ -72,6 +73,8 @@ const MONTHS = [
 ];
 
 export default function InvoicesClient({ initialInvoices }: { initialInvoices: Invoice[] }) {
+  const { data: session } = useSession();
+  const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/invoices") : false;
   const [invoices, setInvoices] = useState<Invoice[]>(initialInvoices);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -251,43 +254,44 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
       </div>
 
       {/* ── Generate Invoice Bulanan Panel ── */}
-      <div className="mb-6 border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
-        {/* Header / Toggle */}
-        <button
-          onClick={() => {
-            setShowMonthlyPanel((v) => !v);
-            setGenerateResult(null);
-          }}
-          className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-50 to-violet-50 hover:from-indigo-100 hover:to-violet-100 transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            {/* Checkbox visual */}
-            <span
-              className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                showMonthlyPanel
-                  ? "bg-indigo-600 border-indigo-600"
-                  : "bg-white border-slate-300"
-              }`}
-            >
-              {showMonthlyPanel && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
-            </span>
-            <CalendarDays className="w-5 h-5 text-indigo-600 shrink-0" />
-            <div className="text-left">
-              <p className="text-sm font-semibold text-slate-800">Generate Invoice Bulanan</p>
-              <p className="text-xs text-slate-500">
-                Buat invoice secara massal berdasarkan periode bulan &amp; tahun
-              </p>
+      {canWrite && (
+        <div className="mb-6 border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+          {/* Header / Toggle */}
+          <button
+            onClick={() => {
+              setShowMonthlyPanel((v) => !v);
+              setGenerateResult(null);
+            }}
+            className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-r from-indigo-50 to-violet-50 hover:from-indigo-100 hover:to-violet-100 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              {/* Checkbox visual */}
+              <span
+                className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                  showMonthlyPanel
+                    ? "bg-indigo-600 border-indigo-600"
+                    : "bg-white border-slate-300"
+                }`}
+              >
+                {showMonthlyPanel && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
+              </span>
+              <CalendarDays className="w-5 h-5 text-indigo-600 shrink-0" />
+              <div className="text-left">
+                <p className="text-sm font-semibold text-slate-800">Generate Invoice Bulanan</p>
+                <p className="text-xs text-slate-500">
+                  Buat invoice secara massal berdasarkan periode bulan &amp; tahun
+                </p>
+              </div>
             </div>
-          </div>
-          {showMonthlyPanel ? (
-            <ChevronUp className="w-4 h-4 text-slate-400" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-slate-400" />
-          )}
-        </button>
+            {showMonthlyPanel ? (
+              <ChevronUp className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            )}
+          </button>
 
-        {/* Expandable Form */}
-        {showMonthlyPanel && (
+          {/* Expandable Form */}
+          {showMonthlyPanel && (
           <div className="bg-white px-5 py-5 border-t border-slate-100">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Bulan */}
@@ -409,6 +413,7 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
           </div>
         )}
       </div>
+      )}
 
       {/* Search and Filters */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
@@ -499,45 +504,51 @@ export default function InvoicesClient({ initialInvoices }: { initialInvoices: I
                         <Eye className="w-4 h-4" />
                       </Link>
 
-                      {inv.status !== "paid" && (
-                        <button
-                          onClick={() => handleUpdateStatus(inv.id, "paid")}
-                          disabled={updatingId === inv.id}
-                          className="p-3 sm:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors inline-flex items-center"
-                          title="Mark as Paid"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                      )}
+                      {canWrite ? (
+                        <>
+                          {inv.status !== "paid" && (
+                            <button
+                              onClick={() => handleUpdateStatus(inv.id, "paid")}
+                              disabled={updatingId === inv.id}
+                              className="p-3 sm:p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors inline-flex items-center"
+                              title="Mark as Paid"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                          )}
 
-                      {inv.status === "paid" && (
-                        <button
-                          onClick={() => handleUpdateStatus(inv.id, "draft")}
-                          disabled={updatingId === inv.id}
-                          className="p-3 sm:p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center"
-                          title="Undo (Revert to Draft)"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
+                          {inv.status === "paid" && (
+                            <button
+                              onClick={() => handleUpdateStatus(inv.id, "draft")}
+                              disabled={updatingId === inv.id}
+                              className="p-3 sm:p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition-colors inline-flex items-center"
+                              title="Undo (Revert to Draft)"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
 
-                      {pendingDeleteIds.has(inv.id) ? (
-                        <span className="inline-flex items-center gap-1 p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200" title="Delete Pending">
-                          <Clock className="w-4 h-4" />
-                        </span>
+                          {pendingDeleteIds.has(inv.id) ? (
+                            <span className="inline-flex items-center gap-1 p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200" title="Delete Pending">
+                              <Clock className="w-4 h-4" />
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setDeleteTarget(inv);
+                                setDeleteReason("");
+                                setDeleteError("");
+                                setDeleteSuccess(false);
+                              }}
+                              className="p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center"
+                              title="Pengajuan Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </>
                       ) : (
-                        <button
-                          onClick={() => {
-                            setDeleteTarget(inv);
-                            setDeleteReason("");
-                            setDeleteError("");
-                            setDeleteSuccess(false);
-                          }}
-                          className="p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors inline-flex items-center"
-                          title="Pengajuan Delete"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <span className="text-xs text-slate-400 italic">Read-Only</span>
                       )}
                     </div>
                   </td>

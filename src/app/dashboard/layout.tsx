@@ -9,6 +9,7 @@ import { LayoutDashboard, Package, Inbox, Truck, FileText, Map, Settings, LogOut
 import { LanguageProvider, useLanguage } from "@/lib/i18n/LanguageContext";
 import { useTheme } from "next-themes";
 import { DictionaryKey } from "@/lib/i18n/dictionaries";
+import { getPagesForUser } from "@/lib/utils";
 
 function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
@@ -36,7 +37,9 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   if (!session) return null;
 
-  const role = (session.user as any)?.role;
+  const user = session.user as any;
+  const role = user?.role;
+  const userPages = getPagesForUser(user);
 
   const navItems: Array<{ name: DictionaryKey | string; title?: string; href: string; icon: any; roles: string[] }> = [
     { name: "nav.inbound", title: "Inbound (GRN)", href: "/dashboard/inbound", icon: Inbox, roles: ["super_admin", "warehouse_admin", "checker_inbound", "inbound_staff"] },
@@ -53,7 +56,12 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
     { name: "nav.owner", title: "Owner Page", href: "/dashboard/delete-requests", icon: ShieldCheck, roles: ["super_admin"] },
   ];
 
-  const allowedNav = navItems.filter(item => item.roles.includes(role));
+  const allowedNav = navItems.filter(item => {
+    if (role === "super_admin") return true;
+    return userPages.includes(item.href);
+  });
+
+  const isAllowedPath = pathname === "/dashboard" || allowedNav.some(item => pathname === item.href || pathname.startsWith(item.href + '/'));
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-zinc-950 flex transition-colors duration-300">
@@ -148,7 +156,25 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
         </header>
 
         <div className="p-4 md:p-8 flex-1 overflow-auto bg-slate-50 dark:bg-zinc-950 transition-colors duration-300">
-          {children}
+          {isAllowedPath ? (
+            children
+          ) : (
+            <div className="min-h-[50vh] flex flex-col items-center justify-center text-center p-6 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-3xl shadow-sm max-w-md mx-auto my-12">
+              <div className="w-16 h-16 rounded-2xl bg-rose-50 dark:bg-rose-950/30 flex items-center justify-center text-rose-600 dark:text-rose-400 mb-5">
+                <ShieldCheck className="w-8 h-8" />
+              </div>
+              <h2 className="text-lg font-bold text-slate-800 dark:text-zinc-100">Akses Ditolak</h2>
+              <p className="text-slate-500 dark:text-zinc-400 mt-2 text-xs max-w-xs leading-relaxed">
+                Anda tidak memiliki izin untuk mengakses halaman ini. Silakan hubungi Owner / Super Admin jika Anda memerlukan akses.
+              </p>
+              <Link
+                href="/dashboard"
+                className="mt-6 px-4 py-2 bg-primary hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-primary/20 transition-all"
+              >
+                Kembali ke Dashboard
+              </Link>
+            </div>
+          )}
         </div>
       </main>
 

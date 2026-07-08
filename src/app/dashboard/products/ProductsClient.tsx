@@ -8,6 +8,8 @@ import {
   AlertTriangle, Clock, MessageSquare,
 } from "lucide-react";
 import Select from "react-select";
+import { useSession } from "next-auth/react";
+import { hasWriteAccess } from "@/lib/utils";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Customer { id: string; name: string; code: string }
@@ -65,6 +67,8 @@ export default function ProductsClient({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const { data: session } = useSession();
+  const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/products") : false;
 
   const customerOptions = useMemo(() => {
     return customers.map(c => ({
@@ -282,13 +286,15 @@ export default function ProductsClient({
             {filtered.length} of {products.length} products
           </span>
 
-          <button
-            onClick={openAdd}
-            className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20 whitespace-nowrap w-full sm:w-auto"
-          >
-            <Plus className="w-5 h-5" />
-            Add Product
-          </button>
+          {canWrite && (
+            <button
+              onClick={openAdd}
+              className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20 whitespace-nowrap w-full sm:w-auto"
+            >
+              <Plus className="w-5 h-5" />
+              Add Product
+            </button>
+          )}
         </div>
       </div>
 
@@ -356,22 +362,28 @@ export default function ProductsClient({
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => openEdit(p)}
-                        title="Edit product"
-                        className="flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors border border-primary/10"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(p)}
-                        title="Request Deletion"
-                        className="flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        Pengajuan Delete
-                      </button>
+                      {canWrite ? (
+                        <>
+                          <button
+                            onClick={() => openEdit(p)}
+                            title="Edit product"
+                            className="flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-primary bg-primary/5 hover:bg-primary/10 rounded-lg transition-colors border border-primary/10"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => setDeleteTarget(p)}
+                            title="Request Deletion"
+                            className="flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors border border-red-100"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Pengajuan Delete
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">Read-Only</span>
+                      )}
                     </div>
                   </td>
                 </tr>

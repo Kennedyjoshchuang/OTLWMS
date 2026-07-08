@@ -5,7 +5,7 @@ import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
+import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess } from "@/lib/utils";
 import {
   Search, Inbox, Plus, X, Trash2,
   PackagePlus, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
@@ -53,6 +53,7 @@ export default function InboundClient({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { data: session } = useSession();
+  const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/inbound") : false;
 
   // Table search
   const [search, setSearch] = useState("");
@@ -348,13 +349,15 @@ export default function InboundClient({
             />
           </div>
 
-          <button
-            onClick={() => { resetForm(); setShowModal(true); }}
-            className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20 w-full sm:w-auto"
-          >
-            <Plus className="w-5 h-5" />
-            New Inbound
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => { resetForm(); setShowModal(true); }}
+              className="flex items-center justify-center gap-2 bg-primary hover:bg-primary-focus text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-sm shadow-primary/20 w-full sm:w-auto"
+            >
+              <Plus className="w-5 h-5" />
+              New Inbound
+            </button>
+          )}
         </div>
 
       {/* Mobile Card View */}
@@ -410,7 +413,7 @@ export default function InboundClient({
               )}
             </div>
             
-            {!receipt.isDeleted && (
+            {!receipt.isDeleted && canWrite && (
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-1">
                 {receipt.status !== "discrepancy" && (
                   <button
@@ -517,35 +520,41 @@ export default function InboundClient({
                         <span className="text-[11px] text-slate-400 italic">Data removed</span>
                       ) : (
                         <div className="flex justify-end gap-1.5">
-                          {receipt.status !== "discrepancy" && (
-                            <button
-                              onClick={() => handleUndo(receipt.id)}
-                              disabled={undoTargetId === receipt.id}
-                              className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
-                              title="Undo GRN"
-                            >
-                              {undoTargetId === receipt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
-                              Undo
-                            </button>
-                          )}
-                          {pendingDeleteIds.has(receipt.id) ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
-                              <Clock className="w-3 h-3" />
-                              Delete Pending
-                            </span>
+                          {canWrite ? (
+                            <>
+                              {receipt.status !== "discrepancy" && (
+                                <button
+                                  onClick={() => handleUndo(receipt.id)}
+                                  disabled={undoTargetId === receipt.id}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
+                                  title="Undo GRN"
+                                >
+                                  {undoTargetId === receipt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+                                  Undo
+                                </button>
+                              )}
+                              {pendingDeleteIds.has(receipt.id) ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
+                                  <Clock className="w-3 h-3" />
+                                  Delete Pending
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setDeleteTarget(receipt);
+                                    setDeleteReason("");
+                                    setDeleteError("");
+                                    setDeleteSuccess(false);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Pengajuan Delete
+                                </button>
+                              )}
+                            </>
                           ) : (
-                            <button
-                              onClick={() => {
-                                setDeleteTarget(receipt);
-                                setDeleteReason("");
-                                setDeleteError("");
-                                setDeleteSuccess(false);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Pengajuan Delete
-                            </button>
+                            <span className="text-xs text-slate-400 italic">Read-Only</span>
                           )}
                         </div>
                       )}

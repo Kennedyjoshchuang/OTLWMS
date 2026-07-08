@@ -2,11 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { formatDateTime, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
+import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess } from "@/lib/utils";
+import { useSession } from "next-auth/react";
 import { Search, Package, ArrowRight, Printer, Trash2, Clock, MessageSquare, AlertTriangle, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import { useEffect } from "react";
 
 export default function DeliveryOrdersClient({ initialOrders }: { initialOrders: any[] }) {
+  const { data: session } = useSession();
+  const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/delivery-orders") : false;
   const [search, setSearch] = useState("");
   const [orders] = useState(initialOrders);
 
@@ -123,22 +126,26 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
                 >
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                {pendingDeleteIds.has(order.id) ? (
-                  <span className="p-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center">
-                    <Clock className="w-4 h-4" />
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setDeleteTarget(order);
-                      setDeleteReason("");
-                      setDeleteError("");
-                      setDeleteSuccess(false);
-                    }}
-                    className="p-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors bg-red-50 flex items-center justify-center"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                {canWrite && (
+                  <>
+                    {pendingDeleteIds.has(order.id) ? (
+                      <span className="p-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center px-4" title="Delete Pending">
+                        <Clock className="w-4 h-4" />
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setDeleteTarget(order);
+                          setDeleteReason("");
+                          setDeleteError("");
+                          setDeleteSuccess(false);
+                        }}
+                        className="p-2.5 text-red-600 hover:bg-red-50 rounded-xl transition-colors bg-red-50 flex items-center justify-center px-4"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -222,23 +229,27 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
                       <ArrowRight className="w-4 h-4" />
                     </Link>
 
-                    {pendingDeleteIds.has(order.id) ? (
-                      <span className="inline-flex items-center p-3 sm:p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200" title="Delete Pending">
-                        <Clock className="w-4 h-4" />
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setDeleteTarget(order);
-                          setDeleteReason("");
-                          setDeleteError("");
-                          setDeleteSuccess(false);
-                        }}
-                        className="inline-flex items-center p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Pengajuan Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    {canWrite && (
+                      <>
+                        {pendingDeleteIds.has(order.id) ? (
+                          <span className="inline-flex items-center p-3 sm:p-2 rounded-lg text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 ml-2" title="Delete Pending">
+                            <Clock className="w-4 h-4" />
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setDeleteTarget(order);
+                              setDeleteReason("");
+                              setDeleteError("");
+                              setDeleteSuccess(false);
+                            }}
+                            className="inline-flex items-center p-3 sm:p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-2"
+                            title="Pengajuan Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </>
                     )}
                   </td>
                 </tr>

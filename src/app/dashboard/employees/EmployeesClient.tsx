@@ -1,11 +1,28 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react";
 import {
   Search, UserPlus, Shield, Truck, Package, Inbox, User, Key,
   X, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff, Phone, Lock,
-  Copy, Check, RefreshCw, LogIn, Trash2, Clock
+  Copy, Check, RefreshCw, LogIn, Trash2, Clock, Edit
 } from "lucide-react";
+import { DEFAULT_ROLE_PAGES, ROLE_LABEL } from "@/lib/utils";
+
+const ALL_PAGES = [
+  { href: "/dashboard/inbound", label: "Inbound (GRN)" },
+  { href: "/dashboard/products", label: "Products" },
+  { href: "/dashboard/warehouse", label: "Warehouse Map" },
+  { href: "/dashboard/delivery-tickets", label: "Pick Lists" },
+  { href: "/dashboard/invoices", label: "Billing & Invoices" },
+  { href: "/dashboard/delivery-orders", label: "Outbound" },
+  { href: "/dashboard/deliveries", label: "Deliveries" },
+  { href: "/dashboard/employees", label: "Employees" },
+  { href: "/dashboard/analytics", label: "Analytics" },
+  { href: "/dashboard/reports", label: "Reports" },
+  { href: "/dashboard/settings", label: "Settings" },
+  { href: "/dashboard/delete-requests", label: "Owner Page" },
+];
 
 // ── Role definitions ────────────────────────────────────────────────────────
 const ROLES = [
@@ -57,7 +74,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 // ── Credential Card Modal ────────────────────────────────────────────────────
-function CredentialModal({ user, onClose }: { user: any; onClose: () => void }) {
+function CredentialModal({ user, onClose, isSuperAdmin }: { user: any; onClose: () => void; isSuperAdmin: boolean }) {
   const [showPass, setShowPass] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [resetting, setResetting] = useState(false);
@@ -137,49 +154,51 @@ function CredentialModal({ user, onClose }: { user: any; onClose: () => void }) 
           </div>
 
           {/* Reset Password */}
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Reset Password</p>
-            {resetSuccess ? (
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm">
-                <CheckCircle2 className="w-4 h-4 shrink-0" /> Password berhasil diubah!
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {resetError && (
-                  <p className="text-xs text-red-600 flex items-center gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {resetError}
-                  </p>
-                )}
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                    <input
-                      type={showPass ? "text" : "password"}
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      placeholder="Password baru"
-                      className="w-full pl-8 pr-8 py-2 border rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary outline-none transition-all"
-                    />
+          {isSuperAdmin && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Reset Password</p>
+              {resetSuccess ? (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" /> Password berhasil diubah!
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {resetError && (
+                    <p className="text-xs text-red-600 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {resetError}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <input
+                        type={showPass ? "text" : "password"}
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        placeholder="Password baru"
+                        className="w-full pl-8 pr-8 py-2 border rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary outline-none transition-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass(p => !p)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
+                      >
+                        {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                     <button
-                      type="button"
-                      onClick={() => setShowPass(p => !p)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400"
+                      onClick={handleReset}
+                      disabled={resetting}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 disabled:opacity-60 transition-colors"
                     >
-                      {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Reset
                     </button>
                   </div>
-                  <button
-                    onClick={handleReset}
-                    disabled={resetting}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 disabled:opacity-60 transition-colors"
-                  >
-                    {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    Reset
-                  </button>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -188,6 +207,10 @@ function CredentialModal({ user, onClose }: { user: any; onClose: () => void }) 
 
 // ── Main Component ───────────────────────────────────────────────────────────
 export default function EmployeesClient({ initialUsers }: { initialUsers: any[] }) {
+  const { data: session } = useSession();
+  const currentUserRole = (session?.user as any)?.role;
+  const isSuperAdmin = currentUserRole === "super_admin";
+
   const [users, setUsers]           = useState(initialUsers);
   const [search, setSearch]         = useState("");
   const [filterRole, setFilterRole] = useState("");
@@ -196,12 +219,23 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
   // Add Modal state
   const [modalOpen, setModalOpen]           = useState(false);
   const [form, setForm]                     = useState({ fullName: "", password: "", role: "", phone: "" });
+  const [allowedPages, setAllowedPages]     = useState<string[]>([]);
+  const [readWritePages, setReadWritePages] = useState<string[]>([]);
   const [showPassword, setShowPassword]     = useState(false);
   const [submitting, setSubmitting]         = useState(false);
   const [error, setError]                   = useState("");
   const [success, setSuccess]               = useState(false);
   const [createdUsername, setCreatedUsername] = useState("");
   const [createdPassword, setCreatedPassword] = useState("");
+
+  // Edit Modal state
+  const [editModalOpen, setEditModalOpen]       = useState(false);
+  const [editUser, setEditUser]                 = useState<any>(null);
+  const [editForm, setEditForm]                 = useState({ fullName: "", role: "", phone: "" });
+  const [editAllowedPages, setEditAllowedPages] = useState<string[]>([]);
+  const [editReadWritePages, setEditReadWritePages] = useState<string[]>([]);
+  const [editSubmitting, setEditSubmitting]     = useState(false);
+  const [editError, setEditError]               = useState("");
 
   // Delete Request state
   const [userToDelete, setUserToDelete]     = useState<any>(null);
@@ -218,6 +252,8 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
 
   const openModal = () => {
     setForm({ fullName: "", password: "", role: "", phone: "" });
+    setAllowedPages([]);
+    setReadWritePages([]);
     setError(""); setSuccess(false); setShowPassword(false);
     setCreatedUsername(""); setCreatedPassword("");
     setModalOpen(true);
@@ -233,7 +269,11 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
       const res = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          allowedPages,
+          readWritePages,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Gagal menambahkan employee.");
@@ -245,6 +285,51 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const openEditModal = (user: any) => {
+    setEditUser(user);
+    setEditForm({ fullName: user.fullName, role: user.role, phone: user.phone || "" });
+    
+    const userAllowed = user.allowedPages && user.allowedPages.length > 0
+      ? user.allowedPages
+      : DEFAULT_ROLE_PAGES[user.role] || [];
+      
+    const userReadWrite = user.allowedPages && user.allowedPages.length > 0
+      ? user.readWritePages || []
+      : (user.role === "customer_viewer" ? [] : [...userAllowed]);
+
+    setEditAllowedPages(userAllowed);
+    setEditReadWritePages(userReadWrite);
+    setEditError("");
+    setEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editForm.fullName.trim() || !editForm.role) {
+      setEditError("Nama dan role wajib diisi."); return;
+    }
+    setEditSubmitting(true); setEditError("");
+    try {
+      const res = await fetch(`/api/employees/${editUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...editForm,
+          allowedPages: editAllowedPages,
+          readWritePages: editReadWritePages,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal mengubah employee.");
+      
+      setUsers(prev => prev.map(u => u.id === editUser.id ? { ...u, ...data } : u));
+      setEditModalOpen(false);
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -304,13 +389,15 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
             {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
           </select>
         </div>
-        <button
-          onClick={openModal}
-          className="flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 w-full sm:w-auto"
-        >
-          <UserPlus className="w-5 h-5" />
-          Tambah Karyawan
-        </button>
+        {isSuperAdmin && (
+          <button
+            onClick={openModal}
+            className="flex items-center justify-center gap-2 bg-primary hover:bg-emerald-700 text-white px-4 py-3 sm:py-2 rounded-xl font-medium transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 w-full sm:w-auto"
+          >
+            <UserPlus className="w-5 h-5" />
+            Tambah Karyawan
+          </button>
+        )}
       </div>
 
       {/* Stats */}
@@ -379,12 +466,36 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
 
                     <td className="px-5 py-4 align-top max-w-xs">
                       <div className="flex flex-wrap gap-1">
-                        {roleInfo.pages.slice(0, 3).map(p => (
-                          <span key={p} className="text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{p}</span>
-                        ))}
-                        {roleInfo.pages.length > 3 && (
-                          <span className="text-[10px] text-slate-400 px-1.5 py-0.5 border border-transparent">+{roleInfo.pages.length - 3} lagi</span>
-                        )}
+                        {(() => {
+                          const hasCustomPages = user.allowedPages && user.allowedPages.length > 0;
+                          const pagesToShow = hasCustomPages
+                            ? user.allowedPages.map((path: string) => {
+                                const label = ALL_PAGES.find(p => p.href === path)?.label || path;
+                                const isRw = user.readWritePages?.includes(path);
+                                return { name: label, mode: isRw ? "R/W" : "R/O" };
+                              })
+                            : roleInfo.pages.map((pName: string) => {
+                                return { name: pName, mode: user.role === "customer_viewer" ? "R/O" : "R/W" };
+                              });
+
+                          return (
+                            <>
+                              {pagesToShow.slice(0, 3).map((p: any) => (
+                                <span key={p.name} className={`text-[10px] px-1.5 py-0.5 rounded border flex items-center gap-1 ${
+                                  p.mode === "R/W"
+                                    ? "text-emerald-700 bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-900/30"
+                                    : "text-slate-500 bg-slate-50 border-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:border-zinc-700"
+                                }`}>
+                                  {p.name}
+                                  <span className="text-[8px] font-bold opacity-60">({p.mode})</span>
+                                </span>
+                              ))}
+                              {pagesToShow.length > 3 && (
+                                <span className="text-[10px] text-slate-400 px-1.5 py-0.5 border border-transparent">+{pagesToShow.length - 3} lagi</span>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </td>
 
@@ -403,25 +514,36 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
 
                     <td className="px-5 py-4 align-top">
                       <div className="flex justify-end gap-2">
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => openEditModal(user)}
+                            title="Edit Akses Karyawan"
+                            className="p-3 sm:p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-primary hover:text-white hover:border-primary transition-all"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => setCredUser(user)}
-                          title="Lihat Kredensial & Reset Password"
+                          title={isSuperAdmin ? "Lihat Kredensial & Reset Password" : "Lihat Kredensial"}
                           className="p-3 sm:p-2 rounded-lg border border-slate-200 text-slate-500 hover:bg-primary hover:text-white hover:border-primary transition-all"
                         >
                           <LogIn className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => {
-                            setUserToDelete(user);
-                            setDeleteReason("");
-                            setDeleteError("");
-                          }}
-                          disabled={!user.isActive || (user.deleteRequests && user.deleteRequests.length > 0)}
-                          title={!user.isActive ? "Sudah dihapus (nonaktif)" : "Ajukan Hapus Karyawan"}
-                          className="p-3 sm:p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {isSuperAdmin && (
+                          <button
+                            onClick={() => {
+                              setUserToDelete(user);
+                              setDeleteReason("");
+                              setDeleteError("");
+                            }}
+                            disabled={!user.isActive || (user.deleteRequests && user.deleteRequests.length > 0)}
+                            title={!user.isActive ? "Sudah dihapus (nonaktif)" : "Ajukan Hapus Karyawan"}
+                            className="p-3 sm:p-2 rounded-lg border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -433,7 +555,7 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
       )}
 
       {/* Credential Modal */}
-      {credUser && <CredentialModal user={credUser} onClose={() => setCredUser(null)} />}
+      {credUser && <CredentialModal user={credUser} onClose={() => setCredUser(null)} isSuperAdmin={isSuperAdmin} />}
 
       {/* ── Add Employee Modal ─────────────────────────────────── */}
       {modalOpen && (
@@ -544,26 +666,89 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
 
                   {/* Role */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Role / Akses Halaman *</label>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Role Utama / Templat Akses *</label>
                     <select
                       value={form.role}
-                      onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
+                      onChange={e => {
+                        const roleVal = e.target.value;
+                        setForm(p => ({ ...p, role: roleVal }));
+                        const defaultPages = DEFAULT_ROLE_PAGES[roleVal] || [];
+                        setAllowedPages(defaultPages);
+                        if (roleVal === "customer_viewer") {
+                          setReadWritePages([]);
+                        } else {
+                          setReadWritePages(defaultPages);
+                        }
+                      }}
                       className="w-full px-3 py-2.5 border rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
                     >
                       <option value="">— Pilih Role —</option>
                       {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                     </select>
-                    {form.role && (() => {
-                      const r = getRoleInfo(form.role);
-                      return (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {r.pages.map(p => (
-                            <span key={p} className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${r.color}`}>{p}</span>
-                          ))}
-                        </div>
-                      );
-                    })()}
                   </div>
+
+                  {/* Kustomisasi Akses Halaman */}
+                  {form.role && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Kustomisasi Akses Halaman</label>
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 max-h-48 overflow-y-auto space-y-2">
+                        {ALL_PAGES.map(page => {
+                          const isAllowed = allowedPages.includes(page.href);
+                          const isRw = readWritePages.includes(page.href);
+                          return (
+                            <div key={page.href} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-b-0">
+                              <label className="flex items-center gap-2 font-medium text-slate-700 cursor-pointer select-none">
+                                <input
+                                  type="checkbox"
+                                  checked={isAllowed}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      setAllowedPages(p => [...p, page.href]);
+                                      if (form.role !== "customer_viewer") {
+                                        setReadWritePages(p => [...p, page.href]);
+                                      }
+                                    } else {
+                                      setAllowedPages(p => p.filter(h => h !== page.href));
+                                      setReadWritePages(p => p.filter(h => h !== page.href));
+                                    }
+                                  }}
+                                  className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                                />
+                                {page.label}
+                              </label>
+                              
+                              {isAllowed && (
+                                <div className="flex items-center gap-0.5 bg-white border rounded-lg p-0.5 shadow-sm shrink-0 scale-90">
+                                  <button
+                                    type="button"
+                                    onClick={() => setReadWritePages(p => p.filter(h => h !== page.href))}
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all ${
+                                      !isRw
+                                        ? "bg-slate-100 text-slate-700 font-extrabold"
+                                        : "text-slate-400 hover:text-slate-600"
+                                    }`}
+                                  >
+                                    R/O
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setReadWritePages(p => [...p, page.href])}
+                                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all ${
+                                      isRw
+                                        ? "bg-emerald-100 text-emerald-700 font-extrabold"
+                                        : "text-slate-400 hover:text-slate-600"
+                                    }`}
+                                  >
+                                    R/W
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Password */}
                   <div>
@@ -606,6 +791,172 @@ export default function EmployeesClient({ initialUsers }: { initialUsers: any[] 
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Employee Modal ─────────────────────────────────── */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => { if (!editSubmitting) setEditModalOpen(false); }} />
+          <div className="relative z-10 w-full max-w-md mx-4 bg-white rounded-3xl shadow-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-primary to-emerald-600 px-6 py-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
+                  <Edit className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Edit Akses Karyawan</h2>
+                  <p className="text-emerald-100 text-xs">Ubah hak akses & profil</p>
+                </div>
+              </div>
+              {!editSubmitting && (
+                <button onClick={() => setEditModalOpen(false)} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              )}
+            </div>
+
+            <div className="p-6 space-y-4">
+              {editError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {editError}
+                </div>
+              )}
+
+              {/* Full Name */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Nama Lengkap *</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    value={editForm.fullName}
+                    onChange={e => setEditForm(p => ({ ...p, fullName: e.target.value }))}
+                    placeholder="Contoh: Budi Santoso"
+                    className="w-full pl-10 pr-4 py-2.5 border rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">No. Telepon</label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))}
+                    placeholder="+62 812 3456 7890"
+                    className="w-full pl-10 pr-4 py-2.5 border rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Role select */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Role Utama / Templat Akses *</label>
+                <select
+                  value={editForm.role}
+                  onChange={e => {
+                    const roleVal = e.target.value;
+                    setEditForm(p => ({ ...p, role: roleVal }));
+                    const defaultPages = DEFAULT_ROLE_PAGES[roleVal] || [];
+                    setEditAllowedPages(defaultPages);
+                    if (roleVal === "customer_viewer") {
+                      setEditReadWritePages([]);
+                    } else {
+                      setEditReadWritePages(defaultPages);
+                    }
+                  }}
+                  className="w-full px-3 py-2.5 border rounded-xl text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all"
+                >
+                  <option value="">— Pilih Role —</option>
+                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+
+              {/* Dynamic checklist for page access customizability */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Kustomisasi Akses Halaman</label>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 max-h-48 overflow-y-auto space-y-2">
+                  {ALL_PAGES.map(page => {
+                    const isAllowed = editAllowedPages.includes(page.href);
+                    const isRw = editReadWritePages.includes(page.href);
+                    return (
+                      <div key={page.href} className="flex items-center justify-between text-xs py-1 border-b border-slate-100 last:border-b-0">
+                        <label className="flex items-center gap-2 font-medium text-slate-700 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={isAllowed}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setEditAllowedPages(p => [...p, page.href]);
+                                if (editForm.role !== "customer_viewer") {
+                                  setEditReadWritePages(p => [...p, page.href]);
+                                }
+                              } else {
+                                setEditAllowedPages(p => p.filter(h => h !== page.href));
+                                setEditReadWritePages(p => p.filter(h => h !== page.href));
+                              }
+                            }}
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+                          />
+                          {page.label}
+                        </label>
+                        
+                        {isAllowed && (
+                          <div className="flex items-center gap-0.5 bg-white border rounded-lg p-0.5 shadow-sm shrink-0 scale-90">
+                            <button
+                              type="button"
+                              onClick={() => setEditReadWritePages(p => p.filter(h => h !== page.href))}
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all ${
+                                !isRw
+                                  ? "bg-slate-100 text-slate-700 font-extrabold"
+                                  : "text-slate-400 hover:text-slate-600"
+                              }`}
+                            >
+                              R/O
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditReadWritePages(p => [...p, page.href])}
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-bold transition-all ${
+                                isRw
+                                  ? "bg-emerald-100 text-emerald-700 font-extrabold"
+                                  : "text-slate-400 hover:text-slate-600"
+                              }`}
+                            >
+                              R/W
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setEditModalOpen(false)}
+                  disabled={editSubmitting}
+                  className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleEditSubmit}
+                  disabled={editSubmitting}
+                  className="flex-1 py-2.5 bg-primary hover:bg-emerald-700 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-all shadow-sm disabled:opacity-70"
+                >
+                  {editSubmitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan…</> : "Simpan Perubahan"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
