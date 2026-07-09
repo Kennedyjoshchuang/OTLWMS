@@ -11,7 +11,13 @@ export default async function InboundPage() {
         checker: true, 
         packingList: true,
         stockLedgers: {
-          select: { quantity: true }
+          include: {
+            palletPosition: {
+              include: {
+                rack: true
+              }
+            }
+          }
         }
       },
       orderBy: { createdAt: "desc" },
@@ -67,10 +73,29 @@ export default async function InboundPage() {
       }
     }
 
+    const locations = Array.from(
+      new Set(
+        receipt.stockLedgers
+          .map((sl) => {
+            const pos = sl.palletPosition;
+            if (!pos) return null;
+            const rack = pos.rack;
+            if (!rack) return null;
+            const rackName = rack.rackCode === 'FLOOR' ? 'Floor' : rack.rackCode;
+            const rowName = String(pos.rowNumber).padStart(2, '0');
+            const levelName = String(pos.levelNumber).padStart(2, '0');
+            const tierName = `Tier ${rack.rackCode}-${rowName}${levelName}`;
+            return `${rackName}${rowName} - ${tierName}`;
+          })
+          .filter((loc): loc is string => !!loc)
+      )
+    );
+
     return {
       ...receipt,
       status: calculatedStatus,
       outboundedQty,
+      locations,
       isDeleted: false,
     };
   });
@@ -86,6 +111,7 @@ export default async function InboundPage() {
     totalLiterReceived: 0,
     status: "deleted",
     outboundedQty: 0,
+    locations: [],
     isDeleted: true,
     deletedAt: dr.updatedAt,
     deletedReason: dr.reviewNote || dr.reason || null,

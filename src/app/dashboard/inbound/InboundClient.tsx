@@ -9,7 +9,7 @@ import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess } from "@/li
 import {
   Search, Inbox, Plus, X, Trash2,
   PackagePlus, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
-  Clock, MessageSquare, Undo2,
+  Clock, MessageSquare,
 } from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -63,11 +63,6 @@ export default function InboundClient({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
-
-  // Undo state
-  const [undoTargetId, setUndoTargetId] = useState<string | null>(null);
-  const [undoError, setUndoError] = useState("");
-  const [undoSuccess, setUndoSuccess] = useState(false);
 
   // Delete request state
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -300,32 +295,6 @@ export default function InboundClient({
     }
   };
 
-  // ── Undo
-  const handleUndo = async (receiptId: string) => {
-    if (!confirm("Are you sure you want to undo this Inbound Receipt? The stock will be removed from the warehouse.")) return;
-    
-    setUndoTargetId(receiptId);
-    setUndoError("");
-    setUndoSuccess(false);
-
-    try {
-      const res = await fetch(`/api/inbound/${receiptId}/undo`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to undo receipt.");
-
-      setUndoSuccess(true);
-      alert("Receipt undone successfully.");
-      startTransition(() => router.refresh());
-    } catch (err: any) {
-      setUndoError(err.message);
-      alert(err.message);
-    } finally {
-      setUndoTargetId(null);
-    }
-  };
-
   const totalPcs = items.reduce((s, it) => s + Number(it.qty || 0), 0);
   const totalLiter = items.reduce(
     (s, it) => s + Number(it.qty || 0) * Number(it.sizeLiter || 0),
@@ -413,19 +382,23 @@ export default function InboundClient({
               )}
             </div>
             
+            <div className="border-t border-slate-100 pt-3 mt-1">
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Location</p>
+              {receipt.locations && receipt.locations.length > 0 ? (
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {receipt.locations.map((loc: string, idx: number) => (
+                    <span key={idx} className="bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg text-xs font-semibold">
+                      {loc}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-slate-400 italic text-xs">—</span>
+              )}
+            </div>
+            
             {!receipt.isDeleted && canWrite && (
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 mt-1">
-                {receipt.status !== "discrepancy" && (
-                  <button
-                    onClick={() => handleUndo(receipt.id)}
-                    disabled={undoTargetId === receipt.id}
-                    className="flex-1 py-2.5 text-amber-600 hover:bg-amber-50 rounded-xl transition-colors bg-amber-50/50 disabled:opacity-50 flex items-center justify-center border border-amber-100"
-                  >
-                    {undoTargetId === receipt.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4 mr-1.5" />}
-                    <span className="text-xs font-semibold">Undo</span>
-                  </button>
-                )}
-                
                 {pendingDeleteIds.has(receipt.id) ? (
                   <span className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200 flex items-center justify-center">
                     <Clock className="w-4 h-4 mr-1.5" /> Pending
@@ -459,6 +432,7 @@ export default function InboundClient({
                 <th className="px-6 py-4 font-semibold">Received Date</th>
                 <th className="px-6 py-4 font-semibold">Pcs Received</th>
                 <th className="px-6 py-4 font-semibold">Checker</th>
+                <th className="px-6 py-4 font-semibold">Location</th>
                 <th className="px-6 py-4 font-semibold">Status</th>
                 <th className="px-6 py-4 font-semibold text-right">Actions</th>
               </tr>
@@ -466,7 +440,7 @@ export default function InboundClient({
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                     <Inbox className="w-12 h-12 mx-auto mb-3 opacity-20" />
                     No inbound receipts found.
                   </td>
@@ -504,6 +478,19 @@ export default function InboundClient({
                     </td>
                     <td className="px-6 py-4">{receipt.checker?.fullName || <span className="text-slate-300 italic text-xs">—</span>}</td>
                     <td className="px-6 py-4">
+                      {receipt.locations && receipt.locations.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {receipt.locations.map((loc: string, idx: number) => (
+                            <span key={idx} className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[11px] font-semibold whitespace-nowrap">
+                              {loc}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 italic text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
                       <span
                         className={`px-2.5 py-1 rounded-full text-xs font-semibold text-white ${
                           STATUS_COLOR[receipt.status] || "bg-slate-500"
@@ -522,17 +509,7 @@ export default function InboundClient({
                         <div className="flex justify-end gap-1.5">
                           {canWrite ? (
                             <>
-                              {receipt.status !== "discrepancy" && (
-                                <button
-                                  onClick={() => handleUndo(receipt.id)}
-                                  disabled={undoTargetId === receipt.id}
-                                  className="inline-flex items-center gap-1.5 px-4 py-2.5 sm:px-3 sm:py-1.5 text-xs font-medium text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg border border-amber-100 transition-colors disabled:opacity-50"
-                                  title="Undo GRN"
-                                >
-                                  {undoTargetId === receipt.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
-                                  Undo
-                                </button>
-                              )}
+
                               {pendingDeleteIds.has(receipt.id) ? (
                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700 border border-yellow-200">
                                   <Clock className="w-3 h-3" />
