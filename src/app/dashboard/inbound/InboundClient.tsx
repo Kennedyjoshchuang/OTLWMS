@@ -160,8 +160,8 @@ export default function InboundClient({
   const locationOptions = useMemo(() => {
     return rackRowOptions.map(opt => ({
       value: opt.id,
-      label: opt.isFull ? `${opt.label} (FULL)` : opt.label,
-      isDisabled: opt.isFull
+      label: opt.isFull ? `${opt.label} (Occupied)` : opt.label,
+      isDisabled: false
     }));
   }, [rackRowOptions]);
 
@@ -197,10 +197,22 @@ export default function InboundClient({
         const posCode = positions[0]?.positionCode || `Tier ${levelNumber}`;
         return {
           value: levelNumber,
-          label: `${posCode} — ${totalLiter.toFixed(1)} L loaded${isFull ? " (FULL)" : ""}`,
-          isDisabled: isFull,
+          label: `${posCode} — ${totalLiter.toFixed(1)} L loaded${isFull ? " (Occupied)" : ""}`,
+          isDisabled: false,
         };
       });
+  };
+
+  const isItemPositionOccupied = (rackRowId: string, levelNumber: string | number) => {
+    if (!rackRowId || levelNumber === "") return false;
+    const parts = rackRowId.split("_");
+    const rackId = parts[0];
+    const rowNumber = Number(parts[2]);
+    const lvlNum = Number(levelNumber);
+    const rack = racks.find((r: any) => r.id === rackId);
+    if (!rack) return false;
+    const pos = rack.positions.find((p: any) => p.rowNumber === rowNumber && p.levelNumber === lvlNum);
+    return pos ? pos.isOccupied : false;
   };
 
   // ── Filter table
@@ -757,6 +769,14 @@ export default function InboundClient({
                             </button>
                           )}
                         </div>
+
+                        {/* Position Occupied Warning */}
+                        {isItemPositionOccupied(item.rackRowId, item.levelNumber) && (
+                          <div className="col-span-1 lg:col-span-12 mt-2 text-[11px] text-amber-600 bg-amber-50 border border-amber-200/60 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 font-medium shadow-sm">
+                            <span className="shrink-0 font-bold">⚠️ Warning:</span>
+                            This shelf position is already occupied. Multiple items will be placed here.
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

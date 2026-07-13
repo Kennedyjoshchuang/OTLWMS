@@ -753,12 +753,17 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                     {hoveredCell.positions.filter(p => p.isOccupied).map(pos => {
                       const { rack } = getCellData(hoveredCell.rackCode, hoveredCell.rowNumber);
                       return (
-                        <div key={pos.id} className="bg-slate-800/50 p-1 rounded border border-slate-800/80">
-                          <p className="font-semibold text-slate-200 line-clamp-1">{pos.stockLedgers[0]?.product.productName}</p>
-                          <p className="text-[10px] text-slate-400 font-mono flex justify-between">
-                            <span>{getLevelName(rack, pos.levelNumber)}</span>
-                            <span>Qty: {pos.stockLedgers[0]?.quantity} pcs</span>
-                          </p>
+                        <div key={pos.id} className="bg-slate-800/50 p-1.5 rounded border border-slate-800/80 space-y-1">
+                          <p className="text-[10px] font-bold text-slate-400">{getLevelName(rack, pos.levelNumber)}</p>
+                          {pos.stockLedgers.map((sl: any) => (
+                            <div key={sl.id} className="border-t border-slate-700/50 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">
+                              <p className="font-semibold text-slate-200 line-clamp-1">{sl.product?.productName}</p>
+                              <p className="text-[10px] text-slate-400 font-mono flex justify-between">
+                                <span>Batch: {sl.batchNumber || "—"}</span>
+                                <span>Qty: {sl.quantity} pcs</span>
+                              </p>
+                            </div>
+                          ))}
                         </div>
                       );
                     })}
@@ -1012,30 +1017,34 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                             </span>
                           </div>
                           
-                          {pos.isOccupied && pos.stockLedgers[0] ? (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                              <div className="space-y-1">
-                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Info</p>
-                                <p className="font-bold text-slate-800 leading-tight">{pos.stockLedgers[0].product.productName}</p>
-                                <p className="text-[10px] font-mono text-slate-500">{pos.stockLedgers[0].product.productCode}</p>
-                              </div>
-                              
-                              <div className="space-y-1 bg-white p-2.5 rounded-xl border flex flex-col justify-between">
-                                <div className="flex justify-between">
-                                  <span className="font-medium text-slate-500">Qty:</span>
-                                  <span className="font-extrabold text-slate-800">{pos.stockLedgers[0].quantity} pcs</span>
+                          {pos.isOccupied && pos.stockLedgers.length > 0 ? (
+                            <div className="space-y-3">
+                              {pos.stockLedgers.map((sl: any, slIdx: number) => (
+                                <div key={sl.id} className={`grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs ${slIdx > 0 ? 'border-t pt-3 border-slate-200/60' : ''}`}>
+                                  <div className="space-y-1">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Info</p>
+                                    <p className="font-bold text-slate-800 leading-tight">{sl.product.productName}</p>
+                                    <p className="text-[10px] font-mono text-slate-500">{sl.product.productCode}</p>
+                                  </div>
+                                  
+                                  <div className="space-y-1 bg-white p-2.5 rounded-xl border flex flex-col justify-between">
+                                    <div className="flex justify-between">
+                                      <span className="font-medium text-slate-500">Qty:</span>
+                                      <span className="font-extrabold text-slate-800">{sl.quantity} pcs</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="font-medium text-slate-500">Volume:</span>
+                                      <span className="font-bold text-slate-600">
+                                        {(sl.quantity * (sl.product?.sizeLiter || 0)).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between border-t pt-1 mt-1 text-[10px]">
+                                      <span className="text-slate-400">Batch:</span>
+                                      <span className="font-semibold text-slate-600">{sl.batchNumber || 'N/A'}</span>
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="flex justify-between">
-                                  <span className="font-medium text-slate-500">Volume:</span>
-                                  <span className="font-bold text-slate-600">
-                                    {(pos.stockLedgers[0].quantity * (pos.stockLedgers[0].product?.sizeLiter || 0)).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
-                                  </span>
-                                </div>
-                                <div className="flex justify-between border-t pt-1 mt-1 text-[10px]">
-                                  <span className="text-slate-400">Batch:</span>
-                                  <span className="font-semibold text-slate-600">{pos.stockLedgers[0].batchNumber || 'N/A'}</span>
-                                </div>
-                              </div>
+                              ))}
                             </div>
                           ) : (
                             <div className="flex items-center justify-center text-slate-400 py-3 text-xs italic font-medium">

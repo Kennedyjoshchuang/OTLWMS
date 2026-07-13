@@ -67,16 +67,32 @@ export async function POST(req: NextRequest) {
         if (levelNumber !== null) positionWhere.levelNumber = levelNumber;
 
         // Find an available pallet position in this rack row (and tier if specified)
-        const availablePosition = await tx.palletPosition.findFirst({
+        let availablePosition = await tx.palletPosition.findFirst({
           where: positionWhere,
           orderBy: {
             levelNumber: 'asc', // Fill from bottom up if no tier specified
           }
         });
 
+        // If no empty position is available, fall back to any position matching the requested location
+        if (!availablePosition) {
+          const fallbackWhere: any = {
+            rackId,
+            rowNumber,
+          };
+          if (levelNumber !== null) fallbackWhere.levelNumber = levelNumber;
+
+          availablePosition = await tx.palletPosition.findFirst({
+            where: fallbackWhere,
+            orderBy: {
+              levelNumber: 'asc',
+            }
+          });
+        }
+
         if (!availablePosition) {
           const tierInfo = levelNumber !== null ? ` Tier ${levelNumber}` : "";
-          throw new Error(`No empty pallet positions available in Rack ${rackCode} Row ${rowNumber}${tierInfo}`);
+          throw new Error(`No pallet positions available in Rack ${rackCode} Row ${rowNumber}${tierInfo}`);
         }
 
         // Create StockLedger
