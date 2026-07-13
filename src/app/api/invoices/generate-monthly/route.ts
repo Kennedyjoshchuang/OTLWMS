@@ -122,8 +122,28 @@ export async function POST(req: NextRequest) {
         const totalAmount = invoiceItems.reduce((s, i) => s + i.totalPrice, 0);
 
         const invoice = await prisma.$transaction(async (tx) => {
-          const count = await tx.invoice.count();
-          const invoiceNumber = `INV-${yearNum}-${String(count + 1).padStart(4, "0")}`;
+          const prefix = `INV-${yearNum}-`;
+          const latestInvoice = await tx.invoice.findFirst({
+            where: {
+              invoiceNumber: {
+                startsWith: prefix,
+              },
+            },
+            orderBy: {
+              invoiceNumber: "desc",
+            },
+          });
+
+          let nextSeq = 1;
+          if (latestInvoice) {
+            const parts = latestInvoice.invoiceNumber.split("-");
+            const seqStr = parts[parts.length - 1];
+            const lastSeq = parseInt(seqStr, 10);
+            if (!isNaN(lastSeq)) {
+              nextSeq = lastSeq + 1;
+            }
+          }
+          const invoiceNumber = `INV-${yearNum}-${String(nextSeq).padStart(4, "0")}`;
 
           const issuedAt = new Date();
           const dueDate = new Date();

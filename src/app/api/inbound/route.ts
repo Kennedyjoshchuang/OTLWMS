@@ -18,8 +18,29 @@ export async function POST(req: NextRequest) {
     // Process in a transaction to ensure data integrity
     const receipt = await prisma.$transaction(async (tx) => {
       // Generate GRN number
-      const count = await tx.inboundReceipt.count();
-      const receiptNumber = generateGRN(count + 1);
+      const year = new Date().getFullYear();
+      const prefix = `GRN-${year}-`;
+      const latestReceipt = await tx.inboundReceipt.findFirst({
+        where: {
+          receiptNumber: {
+            startsWith: prefix,
+          },
+        },
+        orderBy: {
+          receiptNumber: "desc",
+        },
+      });
+
+      let nextSeq = 1;
+      if (latestReceipt) {
+        const parts = latestReceipt.receiptNumber.split("-");
+        const seqStr = parts[parts.length - 1];
+        const lastSeq = parseInt(seqStr, 10);
+        if (!isNaN(lastSeq)) {
+          nextSeq = lastSeq + 1;
+        }
+      }
+      const receiptNumber = generateGRN(nextSeq);
 
       // Calculate totals from items
       const totalPcsReceived = items.reduce(

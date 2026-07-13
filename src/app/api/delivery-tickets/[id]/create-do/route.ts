@@ -26,8 +26,29 @@ export async function POST(
       }
 
       // 2. Generate DO Number
-      const count = await tx.deliveryOrder.count();
-      const doNumber = generateDO(count + 1);
+      const year = new Date().getFullYear();
+      const prefix = `OTL-PL-${year}-`;
+      const latestDO = await tx.deliveryOrder.findFirst({
+        where: {
+          doNumber: {
+            startsWith: prefix,
+          },
+        },
+        orderBy: {
+          doNumber: "desc",
+        },
+      });
+
+      let nextSeq = 1;
+      if (latestDO) {
+        const parts = latestDO.doNumber.split("-");
+        const seqStr = parts[parts.length - 1];
+        const lastSeq = parseInt(seqStr, 10);
+        if (!isNaN(lastSeq)) {
+          nextSeq = lastSeq + 1;
+        }
+      }
+      const doNumber = generateDO(nextSeq);
 
       // 3. Create DO
       const newDO = await tx.deliveryOrder.create({
