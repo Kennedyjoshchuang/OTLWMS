@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import InboundClient from "./InboundClient";
+import { getDisplayRowNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +83,8 @@ export default async function InboundPage() {
             const rack = pos.rack;
             if (!rack) return null;
             const rackName = rack.rackCode === 'FLOOR' ? 'Floor' : rack.rackCode;
-            const rowName = String(pos.rowNumber).padStart(2, '0');
+            const displayRow = getDisplayRowNumber(rack.rackCode, pos.rowNumber);
+            const rowName = String(displayRow).padStart(2, '0');
             const levelName = String(pos.levelNumber).padStart(2, '0');
             const tierName = `Tier ${rack.rackCode}-${rowName}${levelName}`;
             return `${rackName}${rowName} - ${tierName}`;

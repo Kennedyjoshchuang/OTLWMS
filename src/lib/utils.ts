@@ -174,3 +174,10 @@ export function hasWriteAccess(user: { role: string; readWritePages?: string[] |
   }
   return true;
 }
+
+export function getDisplayRowNumber(rackCode: string, dbRowNumber: number): number {
+  if (rackCode === "FLOOR") return dbRowNumber;
+  if (rackCode === "E") return 17 - dbRowNumber;
+  return 15 - dbRowNumber;
+}
+

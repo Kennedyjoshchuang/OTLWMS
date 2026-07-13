@@ -5,7 +5,7 @@ import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess } from "@/lib/utils";
+import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess, getDisplayRowNumber } from "@/lib/utils";
 import {
   Search, Inbox, Plus, X, Trash2,
   PackagePlus, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
@@ -128,12 +128,17 @@ export default function InboundClient({
         rowMap.get(p.rowNumber)!.push(p);
       });
       Array.from(rowMap.entries())
-        .sort(([a], [b]) => a - b)
-        .forEach(([rowNumber, positions]) => {
+        .map(([rowNumber, positions]) => {
+          const displayRow = getDisplayRowNumber(rack.rackCode, rowNumber);
+          return { rowNumber, displayRow, positions };
+        })
+        .filter(({ displayRow }) => displayRow >= 1)
+        .sort((a, b) => a.displayRow - b.displayRow)
+        .forEach(({ rowNumber, displayRow, positions }) => {
           let totalLiter = 0;
           positions.forEach(p => {
              p.stockLedgers?.forEach((sl: any) => {
-               totalLiter += (sl.quantityLiter || 0);
+                totalLiter += (sl.quantityLiter || 0);
              });
           });
           
@@ -143,7 +148,7 @@ export default function InboundClient({
           
           options.push({
             id: `${rack.id}_${rack.rackCode}_${rowNumber}`,
-            label: `${rack.rackCode === "FLOOR" ? "Floor" : `Rack ${rack.rackCode}`} - Row ${String(rowNumber).padStart(2, "0")} (${totalLiter.toFixed(1)} L loaded)`,
+            label: `${rack.rackCode === "FLOOR" ? "Floor" : `Rack ${rack.rackCode}`} - Row ${String(displayRow).padStart(2, "0")} (${totalLiter.toFixed(1)} L loaded)`,
             isFull,
           });
         });

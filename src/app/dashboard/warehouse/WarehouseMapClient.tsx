@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw } from "lucide-react";
+import { getDisplayRowNumber } from "@/lib/utils";
 
 interface WarehouseMapClientProps {
   initialRacks: any[];
@@ -27,11 +28,6 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
 
   const [search, setSearch] = useState("");
 
-  const getDisplayRowNumber = (rackCode: string, dbRowNumber: number) => {
-    if (rackCode === "FLOOR") return dbRowNumber;
-    if (rackCode === "E") return 17 - dbRowNumber;
-    return 15 - dbRowNumber;
-  };
 
   // Edit Mode state
   const [isEditing, setIsEditing] = useState(false);

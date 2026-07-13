@@ -9,6 +9,7 @@ import {
   format, isSameHour, isSameDay, isSameMonth, differenceInDays, parseISO
 } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
+import { getDisplayRowNumber } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -234,7 +235,8 @@ export async function GET(request: Request) {
       const rack = pos.rack;
       
       const rackName = rack.rackCode === 'FLOOR' ? 'Floor' : rack.rackCode;
-      const rowName = String(pos.rowNumber).padStart(2, '0');
+      const displayRow = getDisplayRowNumber(rack.rackCode, pos.rowNumber);
+      const rowName = String(displayRow).padStart(2, '0');
       const levelName = String(pos.levelNumber).padStart(2, '0');
       const tierName = `Tier ${rack.rackCode}-${rowName}${levelName}`;
       const locStr = `${rackName}${rowName} - ${tierName}`;
