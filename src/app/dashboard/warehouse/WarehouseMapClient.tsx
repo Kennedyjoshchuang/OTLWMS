@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw } from "lucide-react";
-import { getDisplayRowNumber } from "@/lib/utils";
+import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw, Move, ArrowRightLeft } from "lucide-react";
+import { getDisplayRowNumber, hasWriteAccess } from "@/lib/utils";
+import { useSession } from "next-auth/react";
 
 interface WarehouseMapClientProps {
   initialRacks: any[];
@@ -39,6 +40,118 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   // Fetching & sync state
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
+
+  const { data: session } = useSession();
+  const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/warehouse") : false;
+
+  // Move Item state
+  const [movingItem, setMovingItem] = useState<{ ledger: any; currentPosition: any } | null>(null);
+  const [selectedMoveRack, setSelectedMoveRack] = useState("");
+  const [selectedMoveRow, setSelectedMoveRow] = useState("");
+  const [selectedMoveLevel, setSelectedMoveLevel] = useState("");
+  const [moveSearchQuery, setMoveSearchQuery] = useState("");
+  const [moveQty, setMoveQty] = useState("");
+  const [selectedTargetPositionId, setSelectedTargetPositionId] = useState("");
+  const [isMoving, setIsMoving] = useState(false);
+  const [moveError, setMoveError] = useState("");
+
+  // Flat list of all positions (excluding the currently selected position) for target selection
+  const allPositions = useMemo(() => {
+    return racks.flatMap(r =>
+      r.positions.map((p: any) => ({
+        ...p,
+        rackCode: r.rackCode,
+        rackName: r.rackName,
+      }))
+    );
+  }, [racks]);
+
+  // Filtered target positions for moving
+  const filteredTargetPositions = useMemo(() => {
+    if (!movingItem) return [];
+    let list = allPositions.filter((p) => p.id !== movingItem.currentPosition.id);
+
+    if (selectedMoveRack) {
+      list = list.filter((p) => p.rackCode === selectedMoveRack);
+    }
+    if (selectedMoveRow) {
+      list = list.filter((p) => getDisplayRowNumber(p.rackCode, p.rowNumber) === Number(selectedMoveRow));
+    }
+    if (selectedMoveLevel) {
+      list = list.filter((p) => p.levelNumber === Number(selectedMoveLevel));
+    }
+    if (moveSearchQuery) {
+      const q = moveSearchQuery.toLowerCase();
+      list = list.filter((p) => p.positionCode.toLowerCase().includes(q));
+    }
+    return list;
+  }, [allPositions, movingItem, selectedMoveRack, selectedMoveRow, selectedMoveLevel, moveSearchQuery]);
+
+  const moveRowOptions = useMemo(() => {
+    if (!selectedMoveRack) return [];
+    const rackPositions = allPositions.filter(p => p.rackCode === selectedMoveRack);
+    const displayRows = rackPositions.map(p => getDisplayRowNumber(selectedMoveRack, p.rowNumber));
+    // Unique, sorted ascending, and positive
+    const uniqueRows = Array.from(new Set(displayRows))
+      .filter(r => r > 0)
+      .sort((a, b) => a - b);
+    return uniqueRows;
+  }, [allPositions, selectedMoveRack]);
+
+  const moveLevelOptions = useMemo(() => {
+    if (!selectedMoveRack) return [];
+    const rackObj = racks.find(r => r.rackCode === selectedMoveRack);
+    if (!rackObj) return [];
+    const levels = [];
+    for (let i = 1; i <= rackObj.totalLevels; i++) {
+      levels.push(i);
+    }
+    return levels;
+  }, [racks, selectedMoveRack]);
+
+  const handleStartMove = (ledger: any, currentPosition: any) => {
+    setMovingItem({ ledger, currentPosition });
+    setMoveQty(String(ledger.quantity));
+    setSelectedMoveRack("");
+    setSelectedMoveRow("");
+    setSelectedMoveLevel("");
+    setMoveSearchQuery("");
+    setSelectedTargetPositionId("");
+    setMoveError("");
+  };
+
+  const handleConfirmMove = async () => {
+    if (!movingItem || !selectedTargetPositionId) return;
+    setIsMoving(true);
+    setMoveError("");
+    try {
+      const res = await fetch("/api/warehouse/move-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          stockLedgerId: movingItem.ledger.id,
+          targetPositionId: selectedTargetPositionId,
+          moveQty: Number(moveQty),
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to move item.");
+      }
+
+      // Success! Sync map layout
+      await fetchLayout(false);
+      setMovingItem(null);
+      // Close the details cell modal so they see the updated map
+      setSelectedCell(null);
+    } catch (err: any) {
+      console.error("Error moving item:", err);
+      setMoveError(err.message || "Failed to move item.");
+    } finally {
+      setIsMoving(false);
+    }
+  };
 
   const fetchLayout = useCallback(async (showLoader = true) => {
     if (showLoader) setIsLoading(true);
@@ -1020,29 +1133,41 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                           {pos.isOccupied && pos.stockLedgers.length > 0 ? (
                             <div className="space-y-3">
                               {pos.stockLedgers.map((sl: any, slIdx: number) => (
-                                <div key={sl.id} className={`grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs ${slIdx > 0 ? 'border-t pt-3 border-slate-200/60' : ''}`}>
-                                  <div className="space-y-1">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Info</p>
-                                    <p className="font-bold text-slate-800 leading-tight">{sl.product.productName}</p>
-                                    <p className="text-[10px] font-mono text-slate-500">{sl.product.productCode}</p>
+                                <div key={sl.id} className={`flex flex-col gap-2 ${slIdx > 0 ? 'border-t pt-3 border-slate-200/60' : ''}`}>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                                    <div className="space-y-1">
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Info</p>
+                                      <p className="font-bold text-slate-800 leading-tight">{sl.product.productName}</p>
+                                      <p className="text-[10px] font-mono text-slate-500">{sl.product.productCode}</p>
+                                    </div>
+                                    
+                                    <div className="space-y-1 bg-white p-2.5 rounded-xl border flex flex-col justify-between">
+                                      <div className="flex justify-between">
+                                        <span className="font-medium text-slate-500">Qty:</span>
+                                        <span className="font-extrabold text-slate-800">{sl.quantity} pcs</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="font-medium text-slate-500">Volume:</span>
+                                        <span className="font-bold text-slate-600">
+                                          {(sl.quantity * (sl.product?.sizeLiter || 0)).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between border-t pt-1 mt-1 text-[10px]">
+                                        <span className="text-slate-400">Batch:</span>
+                                        <span className="font-semibold text-slate-600">{sl.batchNumber || 'N/A'}</span>
+                                      </div>
+                                    </div>
                                   </div>
-                                  
-                                  <div className="space-y-1 bg-white p-2.5 rounded-xl border flex flex-col justify-between">
-                                    <div className="flex justify-between">
-                                      <span className="font-medium text-slate-500">Qty:</span>
-                                      <span className="font-extrabold text-slate-800">{sl.quantity} pcs</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span className="font-medium text-slate-500">Volume:</span>
-                                      <span className="font-bold text-slate-600">
-                                        {(sl.quantity * (sl.product?.sizeLiter || 0)).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
-                                      </span>
-                                    </div>
-                                    <div className="flex justify-between border-t pt-1 mt-1 text-[10px]">
-                                      <span className="text-slate-400">Batch:</span>
-                                      <span className="font-semibold text-slate-600">{sl.batchNumber || 'N/A'}</span>
-                                    </div>
-                                  </div>
+                                  {canWrite && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartMove(sl, pos)}
+                                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all w-full mt-1"
+                                    >
+                                      <Move className="w-3.5 h-3.5" />
+                                      Move Item
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -1057,6 +1182,254 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                 </div>
               </div>
             )
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── MOVE ITEM DIALOG ────────────────────────────────────── */}
+      <Dialog open={!!movingItem} onOpenChange={(open) => {
+        if (!open) setMovingItem(null);
+      }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto rounded-2xl p-6 bg-white shadow-2xl">
+          <DialogHeader className="border-b pb-4 mb-4">
+            <DialogTitle className="flex items-center gap-2.5 text-xl text-slate-800 font-bold">
+              <Move className="w-5 h-5 text-indigo-600" />
+              Move Stock Item
+            </DialogTitle>
+          </DialogHeader>
+
+          {movingItem && (
+            <div className="space-y-4">
+              {/* Item Info Box */}
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-2.5">
+                <div>
+                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product</h4>
+                  <p className="text-sm font-bold text-slate-800 leading-tight">{movingItem.ledger.product.productName}</p>
+                  <p className="text-[10px] font-mono text-slate-500">{movingItem.ledger.product.productCode}</p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2.5 border-slate-200/50">
+                  <div>
+                    <span className="text-slate-400 font-medium">Batch Number:</span>
+                    <p className="font-semibold text-slate-700">{movingItem.ledger.batchNumber || "N/A"}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium">Current Location:</span>
+                    <p className="font-bold text-indigo-600">{movingItem.currentPosition.positionCode}</p>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-slate-400 font-medium">Total Qty:</span>
+                    <p className="font-semibold text-slate-700">{movingItem.ledger.quantity} pcs</p>
+                  </div>
+                  <div className="mt-1">
+                    <span className="text-slate-400 font-medium">Available (Unreserved):</span>
+                    <p className="font-bold text-emerald-600">
+                      {movingItem.ledger.quantity - (movingItem.ledger.reservedQty || 0)} pcs
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quantity to Move */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Quantity to Move (pcs)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max={movingItem.ledger.quantity}
+                  value={moveQty}
+                  onChange={(e) => setMoveQty(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none font-bold text-slate-800"
+                />
+                <p className="text-[10px] text-slate-400 font-medium">
+                  {Number(moveQty) === movingItem.ledger.quantity ? (
+                    <span className="text-indigo-600 font-semibold">Full move:</span>
+                  ) : (
+                    <span className="text-amber-600 font-semibold">Partial move:</span>
+                  )}{" "}
+                  This will move {moveQty || 0} pcs. 
+                  {Number(moveQty) < movingItem.ledger.quantity && (
+                    <span> Remaining {movingItem.ledger.quantity - Number(moveQty)} pcs will stay.</span>
+                  )}
+                </p>
+              </div>
+
+              {/* Move Destination Filters */}
+              <div className="space-y-3.5 border-t pt-4">
+                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Select Target Position
+                </h4>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {/* Select Rack */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rack</label>
+                    <select
+                      value={selectedMoveRack}
+                      onChange={(e) => {
+                        setSelectedMoveRack(e.target.value);
+                        setSelectedMoveRow("");
+                        setSelectedMoveLevel("");
+                        setSelectedTargetPositionId("");
+                      }}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-slate-700"
+                    >
+                      <option value="">All Racks</option>
+                      {racks.map(r => (
+                        <option key={r.id} value={r.rackCode}>{r.rackCode}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Select Row */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Row</label>
+                    <select
+                      value={selectedMoveRow}
+                      onChange={(e) => {
+                        setSelectedMoveRow(e.target.value);
+                        setSelectedTargetPositionId("");
+                      }}
+                      disabled={!selectedMoveRack}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-slate-700 disabled:opacity-50"
+                    >
+                      <option value="">All Rows</option>
+                      {moveRowOptions.map(displayRow => (
+                        <option key={displayRow} value={displayRow}>
+                          {String(displayRow).padStart(2, "0")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Select Level */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Level</label>
+                    <select
+                      value={selectedMoveLevel}
+                      onChange={(e) => {
+                        setSelectedMoveLevel(e.target.value);
+                        setSelectedTargetPositionId("");
+                      }}
+                      disabled={!selectedMoveRack}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none font-semibold text-slate-700 disabled:opacity-50"
+                    >
+                      <option value="">All Levels</option>
+                      {moveLevelOptions.map(levelNum => {
+                        const levelStr = String(levelNum).padStart(2, "0");
+                        return (
+                          <option key={levelNum} value={levelNum}>
+                            {levelStr}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Direct Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search target position code..."
+                    value={moveSearchQuery}
+                    onChange={(e) => {
+                      setMoveSearchQuery(e.target.value);
+                      setSelectedTargetPositionId("");
+                    }}
+                    className="w-full pl-8 pr-3 py-2 border rounded-xl bg-white text-xs font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                </div>
+
+                {/* Target Selection List */}
+                <div className="border border-slate-100 rounded-xl overflow-hidden bg-slate-50/50">
+                  <div className="bg-slate-100/60 px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex justify-between">
+                    <span>Position Code</span>
+                    <span>Status / Action</span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100">
+                    {filteredTargetPositions.length > 0 ? (
+                      filteredTargetPositions.slice(0, 15).map((pos) => {
+                        const isSelected = selectedTargetPositionId === pos.id;
+                        return (
+                          <div
+                            key={pos.id}
+                            onClick={() => setSelectedTargetPositionId(pos.id)}
+                            className={`px-3 py-2.5 flex justify-between items-center cursor-pointer transition-all hover:bg-slate-100 ${
+                              isSelected ? "bg-indigo-50/70 border-l-4 border-indigo-600 hover:bg-indigo-50" : ""
+                            }`}
+                          >
+                            <span className="font-mono text-xs font-bold text-slate-700">{pos.positionCode}</span>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                pos.isOccupied ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-600"
+                              }`}>
+                                {pos.isOccupied ? "Occupied" : "Empty"}
+                              </span>
+                              <div className={`w-3.5 h-3.5 border-2 rounded-full flex items-center justify-center shrink-0 ${
+                                isSelected ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white"
+                              }`}>
+                                {isSelected && <div className="w-1.5 h-1.5 bg-white rounded-full"></div>}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-4 text-center text-xs italic text-slate-400 font-medium">
+                        No positions match filter criteria
+                      </div>
+                    )}
+                    {filteredTargetPositions.length > 15 && (
+                      <div className="p-2 text-center text-[10px] text-slate-400 bg-slate-50 border-t font-semibold">
+                        Showing top 15 results. Refine filters to see more.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {moveError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {moveError}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setMovingItem(null)}
+                  disabled={isMoving}
+                  className="flex-1 py-2.5 border rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Undo className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmMove}
+                  disabled={isMoving || !selectedTargetPositionId || !moveQty}
+                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isMoving ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Moving...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowRightLeft className="w-3.5 h-3.5" />
+                      Confirm Move
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
