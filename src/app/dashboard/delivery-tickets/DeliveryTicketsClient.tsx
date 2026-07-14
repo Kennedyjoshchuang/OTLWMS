@@ -26,7 +26,7 @@ const SIMULATED_OCR = {
   deliverToName: "PT. RUPA RUPA WARNA",
   deliverToAddress: "KOMPLEK RUKO TANAH MAS, BATAM KOTA, BLOK C NO. 9 KEL. SUNGAI PANAS, INDONESIA",
   items: [
-    { productCode: "2HL001UVA", productName: "JOTAPLAST (ID) NEW WHITE 18L", lotBatchNo: "4154006-1-*-1:2", delQtyPcs: 30, delQtyLiter: 540 },
+    { productCode: "2HL001UVA", productName: "JOTAPLAST (ID) NEW WHITE 18L", lotBatchNo: "4154006-1-*-1:2", delQtyPcs: 30, delQtyLiter: 540, existsInDb: true },
   ],
 };
 
@@ -48,6 +48,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
   const [formData, setFormData] = useState(SIMULATED_OCR);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [creatingDO, setCreatingDO] = useState<string | null>(null);
+  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
 
   // Delete Request State
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -90,6 +91,21 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
       setLocations([]);
     }
   }, [ocrStep, selectedCustomerId, formData.items]);
+
+  useEffect(() => {
+    if (selectedCustomerId) {
+      fetch(`/api/products?customerId=${selectedCustomerId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setAvailableProducts(data);
+          }
+        })
+        .catch((e) => console.error("Error fetching products:", e));
+    } else {
+      setAvailableProducts([]);
+    }
+  }, [selectedCustomerId]);
 
   const handleCreateDO = async (ticketId: string) => {
     setCreatingDO(ticketId);
@@ -162,15 +178,13 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
         });
 
         if (res.ok) {
-          const { text } = await res.json();
-          // Use simulated OCR data (real OCR would parse text here)
-          // All fields including delivery address are sourced from the Pick List data
-          extractedItems = SIMULATED_OCR.items;
-          extractedDtNumber = SIMULATED_OCR.dtNumber;
-          extractedOrderNumber = SIMULATED_OCR.orderNumber;
-          extractedCustomerPoNo = SIMULATED_OCR.customerPoNo;
-          extractedDeliverToName = SIMULATED_OCR.deliverToName;
-          extractedDeliverToAddress = SIMULATED_OCR.deliverToAddress;
+          const parsedData = await res.json();
+          extractedItems = parsedData.items || [];
+          extractedDtNumber = parsedData.dtNumber || "";
+          extractedOrderNumber = parsedData.orderNumber || "";
+          extractedCustomerPoNo = parsedData.customerPoNo || "";
+          extractedDeliverToName = parsedData.deliverToName || "";
+          extractedDeliverToAddress = parsedData.deliverToAddress || "";
         } else {
           throw new Error("Failed to parse PDF");
         }
@@ -196,6 +210,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
               lotBatchNo: batchNo ? String(batchNo) : "",
               delQtyPcs: Number(qtyPcs) || 0,
               delQtyLiter: qtyLiter ? Number(qtyLiter) : 0,
+              existsInDb: true,
             });
           }
         });
@@ -688,32 +703,120 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                         rows={3}
                         className="w-full mt-1 border rounded-lg px-3 py-2 bg-white text-sm resize-none"
                         value={formData.deliverToAddress}
-                        onChange={e => setFormData(p => ({ ...p, deliverToAddress: e.target.value }))}
+                onChange={e => setFormData(p => ({ ...p, deliverToAddress: e.target.value }))}
                       />
                     </div>
 
                     {/* Items with location badges */}
                     <div>
-                      <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block">
-                        Extracted Items & Warehouse Locations
-                      </label>
-                      <div className="border rounded-xl overflow-hidden divide-y">
-                        {formData.items.map((item, i) => {
+                      {(() => {
+                        const itemsWithIndex = (formData.items || []).map((item: any, idx: number) => ({ ...item, originalIndex: idx }));
+                        const unrecognizedItems = itemsWithIndex.filter((item: any) => !item.existsInDb);
+                        const verifiedItems = itemsWithIndex.filter((item: any) => item.existsInDb);
+
+                        const renderItemCard = (item: any) => {
+                          const idx = item.originalIndex;
                           const locs = getLocationsForItem(item.productCode, item.lotBatchNo);
                           return (
-                            <div key={i} className="p-3 bg-white hover:bg-slate-50">
-                              <div className="flex justify-between items-start mb-2">
-                                <div>
-                                  <p className="font-semibold text-slate-800 text-sm font-mono">{item.productCode}</p>
-                                  <p className="text-xs text-slate-500">Batch: {item.lotBatchNo}</p>
+                            <div key={idx} className="p-3 bg-white hover:bg-slate-50 flex flex-col gap-2">
+                              {/* If product does not exist in DB, show a warning badge */}
+                              {!item.existsInDb && (
+                                <div className="flex flex-col gap-1 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded-lg w-fit">
+                                  <div className="flex items-center gap-1.5">
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                    Unrecognized Product Code: "{item.originalParsedCode || item.productCode}"
+                                  </div>
+                                  <div className="text-[10px] text-amber-600 font-normal">
+                                    Showing closest guess: <span className="font-mono bg-amber-100/80 px-1 py-0.5 rounded font-bold">{item.productCode}</span>. Please verify.
+                                  </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className="font-bold text-slate-800 text-sm">{item.delQtyPcs} pcs</p>
-                                  <p className="text-xs text-slate-500">{item.delQtyLiter} L</p>
+                              )}
+                              
+                              <div className="flex flex-col gap-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                                  Product Code & Name
+                                </label>
+                                <select
+                                  value={item.productCode}
+                                  onChange={(e) => {
+                                    const selectedCode = e.target.value;
+                                    const p = availableProducts.find(prod => prod.productCode === selectedCode);
+                                    if (p) {
+                                      setFormData(prev => {
+                                        const newItems = [...prev.items];
+                                        newItems[idx] = {
+                                          ...newItems[idx],
+                                          productCode: p.productCode,
+                                          productName: p.productName,
+                                          delQtyLiter: newItems[idx].delQtyPcs * (p.sizeLiter || 0),
+                                          existsInDb: true
+                                        };
+                                        return { ...prev, items: newItems };
+                                      });
+                                    }
+                                  }}
+                                  className="w-full border rounded-lg px-2.5 py-1.5 text-sm bg-slate-50 focus:ring-1 focus:ring-primary focus:border-transparent outline-none font-mono"
+                                >
+                                  {!item.existsInDb && !availableProducts.some(p => p.productCode === item.productCode) && (
+                                    <option value={item.productCode}>
+                                      ⚠️ {item.productCode} - {item.productName || "Unknown Product"}
+                                    </option>
+                                  )}
+                                  {availableProducts.map((p) => (
+                                    <option key={p.productCode} value={p.productCode}>
+                                      {p.productCode} - {p.productName} ({p.sizeLiter}L)
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Batch No</label>
+                                  <input
+                                    type="text"
+                                    value={item.lotBatchNo || ""}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setFormData(prev => {
+                                        const newItems = [...prev.items];
+                                        newItems[idx] = { ...newItems[idx], lotBatchNo: val };
+                                        return { ...prev, items: newItems };
+                                      });
+                                    }}
+                                    className="w-full mt-1 border rounded-lg px-2 py-1 text-xs bg-white focus:ring-1 focus:ring-primary outline-none font-mono"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Qty (pcs)</label>
+                                  <input
+                                    type="number"
+                                    value={item.delQtyPcs}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value, 10) || 0;
+                                      const p = availableProducts.find(prod => prod.productCode === item.productCode);
+                                      const size = p?.sizeLiter || 0;
+                                      setFormData(prev => {
+                                        const newItems = [...prev.items];
+                                        newItems[idx] = {
+                                          ...newItems[idx],
+                                          delQtyPcs: val,
+                                          delQtyLiter: val * size
+                                        };
+                                        return { ...prev, items: newItems };
+                                      });
+                                    }}
+                                    className="w-full mt-1 border rounded-lg px-2 py-1 text-xs bg-white focus:ring-1 focus:ring-primary outline-none font-bold"
+                                  />
+                                </div>
+                                <div className="flex flex-col justify-end pb-1.5">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Volume</span>
+                                  <span className="text-xs text-slate-500 font-semibold mt-1">{(item.delQtyLiter || 0).toLocaleString()} L</span>
                                 </div>
                               </div>
+
                               {/* Location badges */}
-                              <div className="flex flex-wrap gap-1.5 mt-1">
+                              <div className="flex flex-wrap gap-1.5 mt-1 border-t pt-2">
                                 {locLoading ? (
                                   <span className="text-xs text-slate-400 flex items-center gap-1">
                                     <Loader2 className="w-3 h-3 animate-spin" /> Looking up locations...
@@ -722,7 +825,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                                   <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                                     <Clock className="w-3 h-3" /> No stock found
                                   </span>
-                                ) : locs.map((loc, li) => (
+                                ) : locs.map((loc: any, li: number) => (
                                   <span key={li} className="text-xs font-mono font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
                                     <MapPin className="w-3 h-3" /> {loc.positionCode}
                                     <span className="font-normal text-emerald-600">({loc.availableQty})</span>
@@ -731,8 +834,39 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                               </div>
                             </div>
                           );
-                        })}
-                      </div>
+                        };
+
+                        return (
+                          <div className="flex flex-col gap-4">
+                            {unrecognizedItems.length > 0 && (
+                              <div className="flex flex-col gap-1.5">
+                                <label className="text-[11px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1">
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                  Items Requiring Review ({unrecognizedItems.length})
+                                </label>
+                                <div className="border border-amber-200 bg-amber-50/10 rounded-xl overflow-hidden divide-y shadow-sm">
+                                  {unrecognizedItems.map(renderItemCard)}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex flex-col gap-1.5">
+                              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                                {unrecognizedItems.length > 0 ? "✓ Verified Items" : "Extracted Items & Warehouse Locations"} ({verifiedItems.length})
+                              </label>
+                              {verifiedItems.length > 0 ? (
+                                <div className="border border-slate-200 rounded-xl overflow-hidden divide-y shadow-sm">
+                                  {verifiedItems.map(renderItemCard)}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-slate-400 italic p-3 border border-dashed rounded-xl text-center bg-slate-50/50">
+                                  No verified items matching exact product codes yet.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {locations.some(l => l.locations.length > 0) && (

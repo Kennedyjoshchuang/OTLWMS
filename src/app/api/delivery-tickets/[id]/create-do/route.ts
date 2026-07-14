@@ -10,7 +10,8 @@ export async function POST(
     const { id } = await params;
 
     // Run in a transaction
-    const deliveryOrder = await prisma.$transaction(async (tx) => {
+    const deliveryOrder = await prisma.$transaction(
+      async (tx) => {
       // 1. Fetch DT
       const ticket = await tx.deliveryTicket.findUnique({
         where: { id },
@@ -62,20 +63,28 @@ export async function POST(
       });
 
       // 4. Allocate picking items from StockLedger
+      const productIds = ticket.items
+        .map((item) => item.productId)
+        .filter((id): id is string => !!id);
+
+      const allStockEntries = await tx.stockLedger.findMany({
+        where: {
+          productId: { in: productIds },
+          quantity: { gt: 0 },
+        },
+        orderBy: { inboundDate: "asc" },
+        include: { palletPosition: true },
+      });
+
       for (const item of ticket.items) {
         if (!item.productId || item.delQtyPcs <= 0) continue;
 
         let requiredQty = item.delQtyPcs;
 
-        // Find available stock for this product, FIFO
-        const stockEntries = await tx.stockLedger.findMany({
-          where: {
-            productId: item.productId,
-            quantity: { gt: 0 },
-          },
-          orderBy: { inboundDate: "asc" },
-          include: { palletPosition: true },
-        });
+        // Find available stock for this product in-memory, FIFO
+        const stockEntries = allStockEntries.filter(
+          (stock) => stock.productId === item.productId
+        );
 
         for (const stock of stockEntries) {
           if (requiredQty <= 0) break;
@@ -85,11 +94,14 @@ export async function POST(
 
           const qtyToPick = Math.min(requiredQty, available);
 
-          // Update reserved quantity
+          // Update reserved quantity in DB
           await tx.stockLedger.update({
             where: { id: stock.id },
             data: { reservedQty: stock.reservedQty + qtyToPick, isReserved: true },
           });
+
+          // Update in-memory to prevent double-allocating from the same entry
+          stock.reservedQty += qtyToPick;
 
           // Create DOPickingItem
           await tx.dOPickingItem.create({
@@ -122,6 +134,10 @@ export async function POST(
       });
 
       return newDO;
+    },
+    {
+      maxWait: 10000,
+      timeout: 30000,
     });
 
     return NextResponse.json({ success: true, deliveryOrder }, { status: 201 });

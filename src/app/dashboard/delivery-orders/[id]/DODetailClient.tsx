@@ -39,6 +39,7 @@ interface DTItem {
 interface ShippedItem {
   id: string;
   dtItemId: string;
+  stockLedgerId: string;
   positionCode: string;
   batchNumber: string | null;
   requiredQty: number;
@@ -114,6 +115,9 @@ export default function DODetailClient({ data }: { data: PageData }) {
     if (qty <= 0) { alert("Masukkan jumlah yang akan diambil (minimal 1)."); return; }
     if (qty > stock.availableQty) { alert(`Stok tidak cukup. Tersedia: ${stock.availableQty} pcs.`); return; }
 
+    const remaining = dtItem.delQtyPcs - dtItem.pickedQty;
+    if (qty > remaining) { alert(`Jumlah mengambil melebihi sisa kebutuhan (${remaining} pcs).`); return; }
+
     setPickingKey(key);
     try {
       const res = await fetch(`/api/delivery-orders/${order.id}/manual-pick`, {
@@ -124,20 +128,20 @@ export default function DODetailClient({ data }: { data: PageData }) {
       const data = await res.json();
       if (!res.ok) { alert(data.error || "Gagal melakukan picking."); return; }
 
-      // Update local DT item picked qty
+      // Update local DT item picked qty and available stock levels across ALL items
       setDtItems((prev) =>
         prev.map((i) => {
-          if (i.id !== dtItem.id) return i;
-          const newPickedQty = i.pickedQty + qty;
+          const isTargetItem = i.id === dtItem.id;
+          const newPickedQty = isTargetItem ? i.pickedQty + qty : i.pickedQty;
+
           return {
             ...i,
             pickedQty: newPickedQty,
-            // Reduce availableQty for this stock location
             availableStock: i.availableStock.map((s) =>
               s.stockLedgerId === stock.stockLedgerId
-                ? { ...s, availableQty: s.availableQty - qty, totalQty: s.totalQty - qty }
+                ? { ...s, availableQty: Math.max(0, s.availableQty - qty), totalQty: Math.max(0, s.totalQty - qty) }
                 : s
-            ).filter((s) => s.totalQty > 0),
+            ),
           };
         })
       );
@@ -146,6 +150,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
       const newShipped: ShippedItem = {
         id: data.newPickingItem.id,
         dtItemId: dtItem.id,
+        stockLedgerId: stock.stockLedgerId,
         positionCode: stock.positionCode,
         batchNumber: stock.batchNumber,
         requiredQty: qty,
@@ -186,14 +191,35 @@ export default function DODetailClient({ data }: { data: PageData }) {
 
       const qtyRestored = shippedItem.pickedQty ?? shippedItem.requiredQty;
 
+      // Check if the stock ledger is present in any of the local availableStock arrays
+      const hasStockLedger = dtItems.some((i) =>
+        i.availableStock.some((s) => s.stockLedgerId === shippedItem.stockLedgerId)
+      );
+
+      if (!hasStockLedger) {
+        // Fallback: Reload the page to fetch the restored stock ledger
+        window.location.reload();
+        return;
+      }
+
       // Remove from shipped list
       setShippedItems((prev) => prev.filter((s) => s.id !== shippedItem.id));
 
-      // Update DT item picked qty + restore stock availability
+      // Update DT item picked qty + restore stock availability locally
       setDtItems((prev) =>
         prev.map((i) => {
-          if (i.id !== shippedItem.dtItemId) return i;
-          return { ...i, pickedQty: Math.max(0, i.pickedQty - qtyRestored) };
+          const isTargetItem = i.id === shippedItem.dtItemId;
+          const newPickedQty = isTargetItem ? Math.max(0, i.pickedQty - qtyRestored) : i.pickedQty;
+
+          return {
+            ...i,
+            pickedQty: newPickedQty,
+            availableStock: i.availableStock.map((s) =>
+              s.stockLedgerId === shippedItem.stockLedgerId
+                ? { ...s, availableQty: s.availableQty + qtyRestored, totalQty: s.totalQty + qtyRestored }
+                : s
+            ),
+          };
         })
       );
 
@@ -435,6 +461,8 @@ export default function DODetailClient({ data }: { data: PageData }) {
                             const key = `${item.id}__${stock.stockLedgerId}`;
                             const inputVal = qtyInputs[key] ?? 0;
                             const isLoading = pickingKey === key;
+                            const itemRemaining = item.delQtyPcs - item.pickedQty;
+                            const maxAllowed = Math.min(stock.availableQty, Math.max(0, itemRemaining));
 
                             return (
                               <tr key={stock.stockLedgerId} className="hover:bg-indigo-50/30 transition-colors">
@@ -464,7 +492,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                 <td className="px-5 py-3">
                                   <div className="flex items-center justify-center gap-1.5">
                                     <button
-                                      onClick={() => setQty(key, inputVal - 1, stock.availableQty)}
+                                      onClick={() => setQty(key, inputVal - 1, maxAllowed)}
                                       className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
                                       disabled={inputVal <= 0}
                                     >
@@ -473,21 +501,21 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                     <input
                                       type="number"
                                       min={0}
-                                      max={stock.availableQty}
+                                      max={maxAllowed}
                                       value={inputVal || ""}
                                       placeholder="0"
-                                      onChange={(e) => setQty(key, parseInt(e.target.value) || 0, stock.availableQty)}
+                                      onChange={(e) => setQty(key, parseInt(e.target.value) || 0, maxAllowed)}
                                       className="w-16 text-center py-1.5 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
                                     />
                                     <button
-                                      onClick={() => setQty(key, inputVal + 1, stock.availableQty)}
+                                      onClick={() => setQty(key, inputVal + 1, maxAllowed)}
                                       className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
-                                      disabled={inputVal >= stock.availableQty}
+                                      disabled={inputVal >= maxAllowed}
                                     >
                                       +
                                     </button>
                                     <button
-                                      onClick={() => setQty(key, stock.availableQty, stock.availableQty)}
+                                      onClick={() => setQty(key, maxAllowed, maxAllowed)}
                                       className="text-xs text-indigo-500 hover:text-indigo-700 font-semibold ml-1 hover:underline"
                                     >
                                       Max
@@ -499,7 +527,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                 <td className="px-5 py-3 text-right">
                                   <button
                                     onClick={() => handlePick(item, stock)}
-                                    disabled={isLoading || inputVal <= 0 || stock.availableQty === 0}
+                                    disabled={isLoading || inputVal <= 0 || stock.availableQty === 0 || itemRemaining <= 0}
                                     className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-3 sm:py-2 rounded-xl transition-all shadow-sm w-full sm:w-auto"
                                   >
                                     {isLoading ? (

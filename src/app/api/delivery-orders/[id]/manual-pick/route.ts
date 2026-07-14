@@ -43,6 +43,18 @@ export async function POST(
       const dtItem = await tx.deliveryTicketItem.findUnique({ where: { id: dtItemId } });
       if (!dtItem) throw new Error("Delivery Ticket item not found.");
 
+      // Validate that picking quantity does not exceed the remaining needed quantity
+      const alreadyPickedAgg = await tx.dOPickingItem.aggregate({
+        where: { deliveryOrderId: id, dtItemId, status: "shipped" },
+        _sum: { pickedQty: true },
+      });
+      const alreadyPicked = alreadyPickedAgg._sum.pickedQty ?? 0;
+      const remainingNeeded = Math.max(0, dtItem.delQtyPcs - alreadyPicked);
+
+      if (quantity > remainingNeeded) {
+        throw new Error(`Jumlah pick (${quantity} pcs) melebihi sisa kebutuhan (${remainingNeeded} pcs).`);
+      }
+
       // 4. Deduct stock
       const newQty = stock.quantity - quantity;
       const newReservedQty = Math.max(0, stock.reservedQty - quantity);
