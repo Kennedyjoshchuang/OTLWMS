@@ -7,7 +7,7 @@ import {
   ShieldCheck, Trash2, XCircle, CheckCircle2, Clock,
   Package, FileText, Receipt, AlertTriangle, Loader2,
   User, MessageSquare, Search, Filter, Users, Truck,
-  Archive, ClipboardList
+  Archive, ClipboardList, Layers
 } from "lucide-react";
 
 interface DeleteRequest {
@@ -40,6 +40,7 @@ const MODEL_ICON: Record<string, React.ReactNode> = {
   DeliveryTicket: <ClipboardList className="w-4 h-4" />,
   DeliveryOrder: <Truck className="w-4 h-4" />,
   PackingList: <Archive className="w-4 h-4" />,
+  StockLedger: <Layers className="w-4 h-4" />,
 };
 
 const MODEL_LABEL: Record<string, string> = {
@@ -50,6 +51,7 @@ const MODEL_LABEL: Record<string, string> = {
   DeliveryTicket: "Delivery Ticket",
   DeliveryOrder: "Delivery Order",
   PackingList: "Packing List",
+  StockLedger: "Stock Item",
 };
 
 const MODEL_COLOR: Record<string, string> = {
@@ -60,6 +62,7 @@ const MODEL_COLOR: Record<string, string> = {
   DeliveryTicket: "bg-cyan-100 text-cyan-700",
   DeliveryOrder: "bg-orange-100 text-orange-700",
   PackingList: "bg-fuchsia-100 text-fuchsia-700",
+  StockLedger: "bg-emerald-100 text-emerald-700",
 };
 
 const STATUS_STYLE: Record<string, string> = {

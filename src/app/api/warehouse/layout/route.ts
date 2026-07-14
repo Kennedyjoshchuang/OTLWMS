@@ -10,7 +10,10 @@ export async function GET() {
         positions: {
           include: {
             stockLedgers: {
-              include: { product: true }
+              include: {
+                product: true,
+                inboundReceipt: true
+              }
             }
           },
           orderBy: [

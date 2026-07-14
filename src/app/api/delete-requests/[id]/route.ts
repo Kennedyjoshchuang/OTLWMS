@@ -136,6 +136,58 @@ export async function PATCH(
     } else if (targetModel === "User") {
       // Soft-delete user so they can't login or be assigned tasks, but historical data remains
       await prisma.user.update({ where: { id: targetId }, data: { isActive: false } });
+    } else if (targetModel === "StockLedger") {
+      const ledger = await prisma.stockLedger.findUnique({
+        where: { id: targetId },
+        include: { pickingItems: true },
+      });
+
+      if (ledger) {
+        if (ledger.isReserved || (ledger.reservedQty || 0) > 0 || (ledger.pickingItems && ledger.pickingItems.length > 0)) {
+          return NextResponse.json({
+            error: "Cannot approve deletion: this stock item is currently reserved or associated with a Delivery Order."
+          }, { status: 400 });
+        }
+
+        const posId = ledger.palletPositionId;
+
+        await prisma.$transaction(async (tx) => {
+          // 1. Create StockMovement to record the adjustment (deletion)
+          await tx.stockMovement.create({
+            data: {
+              productId: ledger.productId,
+              palletPositionId: ledger.palletPositionId,
+              movementType: "adjustment",
+              quantity: ledger.quantity,
+              quantityBefore: ledger.quantity,
+              quantityAfter: 0,
+              batchNumber: ledger.batchNumber,
+              notes: `Deleted stock item (ID: ${ledger.id}) via approved deletion request. Reason: ${deleteRequest.reason || 'None'}`,
+              performedById: deleteRequest.requestedById,
+            },
+          });
+
+          // 2. Delete the StockLedger
+          await tx.stockLedger.delete({
+            where: { id: targetId },
+          });
+
+          // 3. Update pallet position occupancy if no more stock remains
+          const remaining = await tx.stockLedger.count({
+            where: {
+              palletPositionId: posId,
+              quantity: { gt: 0 },
+            },
+          });
+
+          if (remaining === 0) {
+            await tx.palletPosition.update({
+              where: { id: posId },
+              data: { isOccupied: false },
+            });
+          }
+        });
+      }
     }
 
     // 5. Mark the delete request as deleted

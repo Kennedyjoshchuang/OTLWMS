@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const validModels = ["InboundReceipt", "Product", "Invoice", "Customer", "DeliveryTicket", "DeliveryOrder", "PackingList", "User"];
+    const validModels = ["InboundReceipt", "Product", "Invoice", "Customer", "DeliveryTicket", "DeliveryOrder", "PackingList", "User", "StockLedger"];
     if (!validModels.includes(targetModel)) {
       return NextResponse.json({ error: `Invalid targetModel: ${targetModel}` }, { status: 400 });
     }
@@ -65,6 +65,29 @@ export async function POST(req: NextRequest) {
         { error: "A deletion request for this item is already pending." },
         { status: 409 }
       );
+    }
+
+    // Extra safety validations for StockLedger
+    if (targetModel === "StockLedger") {
+      const ledger = await prisma.stockLedger.findUnique({
+        where: { id: targetId },
+        include: { pickingItems: true }
+      });
+      if (!ledger) {
+        return NextResponse.json({ error: "Stock ledger item not found." }, { status: 404 });
+      }
+      if (ledger.isReserved || (ledger.reservedQty || 0) > 0) {
+        return NextResponse.json(
+          { error: "Cannot request deletion: this stock item is currently reserved for picking." },
+          { status: 400 }
+        );
+      }
+      if (ledger.pickingItems && ledger.pickingItems.length > 0) {
+        return NextResponse.json(
+          { error: "Cannot request deletion: this stock item is associated with a Delivery Order." },
+          { status: 400 }
+        );
+      }
     }
 
     const request = await (prisma as any).deleteRequest.create({

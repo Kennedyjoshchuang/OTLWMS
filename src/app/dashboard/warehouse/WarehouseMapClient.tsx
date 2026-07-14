@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw, Move, ArrowRightLeft } from "lucide-react";
+import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw, Move, ArrowRightLeft, Trash2, Clock } from "lucide-react";
 import { getDisplayRowNumber, hasWriteAccess } from "@/lib/utils";
 import { useSession } from "next-auth/react";
 
@@ -45,7 +45,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/warehouse") : false;
 
   // Move Item state
-  const [movingItem, setMovingItem] = useState<{ ledger: any; currentPosition: any } | null>(null);
+  const [movingItem, setMovingItem] = useState<any | null>(null);
   const [selectedMoveRack, setSelectedMoveRack] = useState("");
   const [selectedMoveRow, setSelectedMoveRow] = useState("");
   const [selectedMoveLevel, setSelectedMoveLevel] = useState("");
@@ -54,6 +54,16 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   const [selectedTargetPositionId, setSelectedTargetPositionId] = useState("");
   const [isMoving, setIsMoving] = useState(false);
   const [moveError, setMoveError] = useState("");
+  const [mergeDifferingBatches, setMergeDifferingBatches] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+
+  // Delete Request state
+  const [deletingLedger, setDeletingLedger] = useState<{ ledger: any; position: any } | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [pendingDeleteLedgerIds, setPendingDeleteLedgerIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteReceiptIds, setPendingDeleteReceiptIds] = useState<Set<string>>(new Set());
 
   // Flat list of all positions (excluding the currently selected position) for target selection
   const allPositions = useMemo(() => {
@@ -66,10 +76,29 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     );
   }, [racks]);
 
+  // Check if target position contains the same product
+  const targetProductDetails = useMemo(() => {
+    if (!movingItem || !selectedTargetPositionId) return null;
+    const targetPos = allPositions.find(p => p.id === selectedTargetPositionId);
+    if (!targetPos) return null;
+    
+    // Find any ledger of the same product at target with quantity > 0
+    const productId = movingItem.isCollection ? movingItem.productId : movingItem.ledger.productId;
+    const sameProductLedger = targetPos.stockLedgers?.find(
+      (sl: any) => sl.productId === productId && sl.quantity > 0
+    );
+    if (!sameProductLedger) return null;
+    
+    return {
+      productName: sameProductLedger.product?.productName || "this product",
+    };
+  }, [movingItem, selectedTargetPositionId, allPositions]);
+
   // Filtered target positions for moving
   const filteredTargetPositions = useMemo(() => {
     if (!movingItem) return [];
-    let list = allPositions.filter((p) => p.id !== movingItem.currentPosition.id);
+    const sourcePosId = movingItem.isCollection ? movingItem.sourcePosition.id : movingItem.currentPosition.id;
+    let list = allPositions.filter((p) => p.id !== sourcePosId);
 
     if (selectedMoveRack) {
       list = list.filter((p) => p.rackCode === selectedMoveRack);
@@ -118,6 +147,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     setMoveSearchQuery("");
     setSelectedTargetPositionId("");
     setMoveError("");
+    setMergeDifferingBatches(false);
   };
 
   const handleConfirmMove = async () => {
@@ -125,14 +155,22 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     setIsMoving(true);
     setMoveError("");
     try {
+      const payload: any = {
+        targetPositionId: selectedTargetPositionId,
+      };
+
+      if (movingItem.isCollection) {
+        payload.productId = movingItem.productId;
+        payload.sourcePositionId = movingItem.sourcePosition.id;
+      } else {
+        payload.stockLedgerId = movingItem.ledger.id;
+        payload.moveQty = Number(moveQty);
+      }
+
       const res = await fetch("/api/warehouse/move-item", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stockLedgerId: movingItem.ledger.id,
-          targetPositionId: selectedTargetPositionId,
-          moveQty: Number(moveQty),
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -153,7 +191,92 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     }
   };
 
-  const fetchLayout = useCallback(async (showLoader = true) => {
+  const handleStartDeleteRequest = (ledger: any, position: any) => {
+    setDeletingLedger({ ledger, position });
+    setDeleteReason("");
+    setDeleteError("");
+  };
+
+  const handleConfirmDeleteRequest = async () => {
+    if (!deletingLedger) return;
+    setDeleteSubmitting(true);
+    setDeleteError("");
+    try {
+      const hasReceipt = !!deletingLedger.ledger.inboundReceiptId;
+      const targetModel = hasReceipt ? "InboundReceipt" : "StockLedger";
+      const targetId = hasReceipt ? deletingLedger.ledger.inboundReceiptId : deletingLedger.ledger.id;
+      const targetLabel = hasReceipt
+        ? (deletingLedger.ledger.inboundReceipt?.receiptNumber || "Unknown Receipt")
+        : `Stock Item: ${deletingLedger.ledger.product?.productName || 'Unknown'} - Batch: ${deletingLedger.ledger.batchNumber || 'N/A'} - Qty: ${deletingLedger.ledger.quantity} pcs at ${deletingLedger.position.positionCode}`;
+
+      const res = await fetch("/api/delete-requests", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetModel,
+          targetId,
+          targetLabel,
+          reason: deleteReason.trim() || null,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to submit deletion request.");
+      }
+
+      // Success! Update local lists of pending delete IDs
+      if (hasReceipt) {
+        setPendingDeleteReceiptIds(prev => {
+          const next = new Set(prev);
+          next.add(targetId);
+          return next;
+        });
+      } else {
+        setPendingDeleteLedgerIds(prev => {
+          const next = new Set(prev);
+          next.add(targetId);
+          return next;
+        });
+      }
+
+      setDeletingLedger(null);
+    } catch (err: any) {
+      console.error("Error submitting delete request:", err);
+      setDeleteError(err.message || "Failed to submit deletion request.");
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
+  const handleStartCollectionMove = (
+    productId: string,
+    productName: string,
+    productCode: string,
+    totalQty: number,
+    sourcePosition: any,
+    ledgersCount: number
+  ) => {
+    setMovingItem({
+      isCollection: true,
+      productId,
+      productName,
+      productCode,
+      totalQty,
+      sourcePosition,
+      ledgersCount,
+    });
+    setMoveQty(String(totalQty));
+    setSelectedMoveRack("");
+    setSelectedMoveRow("");
+    setSelectedMoveLevel("");
+    setMoveSearchQuery("");
+    setSelectedTargetPositionId("");
+    setMoveError("");
+    setMergeDifferingBatches(false);
+  };
+
+  const fetchLayout = useCallback(async (showLoader = true): Promise<any> => {
     if (showLoader) setIsLoading(true);
     setFetchError("");
     try {
@@ -163,6 +286,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       }
       const data = await res.json();
       setRacks(data);
+      return data;
     } catch (err: any) {
       console.error("Error fetching warehouse layout:", err);
       setFetchError(err.message || "Failed to load layout.");
@@ -174,6 +298,20 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   // Fetch layout on mount to ensure we have the latest synced product data
   useEffect(() => {
     fetchLayout(true);
+
+    // Fetch pending delete requests
+    fetch("/api/delete-requests?status=pending")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const ledgerDeletes = data.filter((d: any) => d.targetModel === "StockLedger");
+          setPendingDeleteLedgerIds(new Set(ledgerDeletes.map((d: any) => d.targetId)));
+
+          const receiptDeletes = data.filter((d: any) => d.targetModel === "InboundReceipt");
+          setPendingDeleteReceiptIds(new Set(receiptDeletes.map((d: any) => d.targetId)));
+        }
+      })
+      .catch((err) => console.error("Error fetching delete requests:", err));
   }, [fetchLayout]);
 
   // 1. Calculate Warehouse Statistics
@@ -868,7 +1006,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                       return (
                         <div key={pos.id} className="bg-slate-800/50 p-1.5 rounded border border-slate-800/80 space-y-1">
                           <p className="text-[10px] font-bold text-slate-400">{getLevelName(rack, pos.levelNumber)}</p>
-                          {pos.stockLedgers.map((sl: any) => (
+                          {pos.stockLedgers.filter((s: any) => s.quantity > 0).map((sl: any) => (
                             <div key={sl.id} className="border-t border-slate-700/50 pt-1 mt-1 first:border-0 first:pt-0 first:mt-0">
                               <p className="font-semibold text-slate-200 line-clamp-1">{sl.product?.productName}</p>
                               <p className="text-[10px] text-slate-400 font-mono flex justify-between">
@@ -1099,9 +1237,11 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                       const matched = search && (
                         pos.positionCode.toLowerCase().includes(search.toLowerCase()) || 
                         pos.stockLedgers.some((s: any) => 
-                          s.product.productCode.toLowerCase().includes(search.toLowerCase()) || 
-                          s.product.productName.toLowerCase().includes(search.toLowerCase()) ||
-                          s.batchNumber?.toLowerCase().includes(search.toLowerCase())
+                          s.quantity > 0 && (
+                            s.product.productCode.toLowerCase().includes(search.toLowerCase()) || 
+                            s.product.productName.toLowerCase().includes(search.toLowerCase()) ||
+                            s.batchNumber?.toLowerCase().includes(search.toLowerCase())
+                          )
                         )
                       );
                       
@@ -1130,48 +1270,155 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                             </span>
                           </div>
                           
-                          {pos.isOccupied && pos.stockLedgers.length > 0 ? (
-                            <div className="space-y-3">
-                              {pos.stockLedgers.map((sl: any, slIdx: number) => (
-                                <div key={sl.id} className={`flex flex-col gap-2 ${slIdx > 0 ? 'border-t pt-3 border-slate-200/60' : ''}`}>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                                    <div className="space-y-1">
-                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product Info</p>
-                                      <p className="font-bold text-slate-800 leading-tight">{sl.product.productName}</p>
-                                      <p className="text-[10px] font-mono text-slate-500">{sl.product.productCode}</p>
-                                    </div>
-                                    
-                                    <div className="space-y-1 bg-white p-2.5 rounded-xl border flex flex-col justify-between">
-                                      <div className="flex justify-between">
-                                        <span className="font-medium text-slate-500">Qty:</span>
-                                        <span className="font-extrabold text-slate-800">{sl.quantity} pcs</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span className="font-medium text-slate-500">Volume:</span>
-                                        <span className="font-bold text-slate-600">
-                                          {(sl.quantity * (sl.product?.sizeLiter || 0)).toLocaleString("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} L
-                                        </span>
-                                      </div>
-                                      <div className="flex justify-between border-t pt-1 mt-1 text-[10px]">
-                                        <span className="text-slate-400">Batch:</span>
-                                        <span className="font-semibold text-slate-600">{sl.batchNumber || 'N/A'}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                  {canWrite && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleStartMove(sl, pos)}
-                                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded-xl transition-all w-full mt-1"
+                          {pos.isOccupied && pos.stockLedgers.filter((s: any) => s.quantity > 0).length > 0 ? (() => {
+                            const activeLedgers = pos.stockLedgers.filter((s: any) => s.quantity > 0);
+                            const groups: Record<string, any[]> = {};
+                            activeLedgers.forEach((sl: any) => {
+                              if (!groups[sl.productId]) groups[sl.productId] = [];
+                              groups[sl.productId].push(sl);
+                            });
+
+                            return (
+                              <div className="space-y-4">
+                                {Object.values(groups).map((groupLedgers: any[], groupIdx: number) => {
+                                  const primarySl = groupLedgers[0];
+                                  const totalQty = groupLedgers.reduce((sum, sl) => sum + sl.quantity, 0);
+                                  const totalLiter = groupLedgers.reduce((sum, sl) => sum + (sl.quantity * (sl.product?.sizeLiter || 0)), 0);
+                                  const batchNames = groupLedgers.map(sl => sl.batchNumber).filter(Boolean);
+                                  const uniqueBatches = Array.from(new Set(batchNames));
+                                  const batchesStr = uniqueBatches.join(", ") || "N/A";
+                                  const isCollection = groupLedgers.length > 1;
+
+                                  return (
+                                    <div 
+                                      key={primarySl.productId} 
+                                      className={`p-3 bg-white rounded-xl border border-slate-200 shadow-sm space-y-3 ${
+                                        groupIdx > 0 ? 'border-t pt-3 mt-3' : ''
+                                      }`}
                                     >
-                                      <Move className="w-3.5 h-3.5" />
-                                      Move Item
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
+                                      <div className="flex justify-between items-start">
+                                        <div className="space-y-1">
+                                          <h4 className="font-bold text-slate-800 text-sm leading-tight">
+                                            {primarySl.product.productName}
+                                          </h4>
+                                          <p className="text-[10px] font-mono text-slate-500">{primarySl.product.productCode}</p>
+                                          {isCollection && (
+                                            <span className="inline-block text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shadow-sm">
+                                              Collection of {groupLedgers.length} stock records
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="text-right">
+                                          <span className="font-extrabold text-sm text-slate-800">{totalQty} pcs</span>
+                                          <p className="text-[10px] text-slate-500 font-bold">{totalLiter.toLocaleString("id-ID", { maximumFractionDigits: 1 })} L</p>
+                                        </div>
+                                      </div>
+
+                                      <div className="text-xs space-y-1.5 bg-slate-50 p-2.5 rounded-lg border border-slate-100/50">
+                                        <div className="flex justify-between text-[10px] font-medium text-slate-500">
+                                          <span>Batches:</span>
+                                          <span className="font-semibold text-slate-700 max-w-[180px] truncate">{batchesStr}</span>
+                                        </div>
+                                        {isCollection && (
+                                          <div className="border-t pt-2 mt-2 space-y-1.5">
+                                            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                                              Individual Stock Records
+                                            </p>
+                                            {groupLedgers.map((sl) => (
+                                              <div key={sl.id} className="flex justify-between items-center text-[10px] py-1 border-b border-slate-100/50 last:border-0">
+                                                <span className="text-slate-600 truncate max-w-[130px]" title={sl.batchNumber || "no batch"}>
+                                                  Batch: {sl.batchNumber || "—"} ({sl.quantity} pcs)
+                                                </span>
+                                                <div className="flex items-center gap-1.5">
+                                                  {canWrite && (
+                                                    <>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleStartMove(sl, pos)}
+                                                        className="text-[9px] font-bold text-indigo-600 hover:text-indigo-800 px-1.5 py-0.5 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 rounded transition-all"
+                                                      >
+                                                        Move Record
+                                                      </button>
+                                                      {(sl.inboundReceiptId && pendingDeleteReceiptIds.has(sl.inboundReceiptId)) || pendingDeleteLedgerIds.has(sl.id) ? (
+                                                        <span className="text-[9px] font-bold text-yellow-600 bg-yellow-50 px-1.5 py-0.5 border border-yellow-100 rounded flex items-center gap-0.5">
+                                                          <Clock className="w-2.5 h-2.5" />
+                                                          Pending
+                                                        </span>
+                                                      ) : (
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => handleStartDeleteRequest(sl, pos)}
+                                                          className="text-[9px] font-bold text-red-600 hover:text-red-800 px-1.5 py-0.5 bg-red-50 hover:bg-red-100 border border-red-100 rounded transition-all flex items-center gap-0.5"
+                                                        >
+                                                          <Trash2 className="w-2.5 h-2.5" />
+                                                          Delete
+                                                        </button>
+                                                      )}
+                                                    </>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {canWrite && (
+                                        <div className="flex gap-2 w-full">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (isCollection) {
+                                                handleStartCollectionMove(
+                                                  primarySl.productId,
+                                                  primarySl.product.productName,
+                                                  primarySl.product.productCode,
+                                                  totalQty,
+                                                  pos,
+                                                  groupLedgers.length
+                                                );
+                                              } else {
+                                                handleStartMove(primarySl, pos);
+                                              }
+                                            }}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
+                                              isCollection
+                                                ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200'
+                                                : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-100'
+                                            }`}
+                                          >
+                                            <Move className="w-3.5 h-3.5" />
+                                            {isCollection ? 'Move Entire Collection' : 'Move Item'}
+                                          </button>
+                                          {!isCollection && (
+                                            ((primarySl.inboundReceiptId && pendingDeleteReceiptIds.has(primarySl.inboundReceiptId)) || pendingDeleteLedgerIds.has(primarySl.id)) ? (
+                                              <button
+                                                disabled
+                                                type="button"
+                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-yellow-200 text-yellow-600 bg-yellow-50"
+                                              >
+                                                <Clock className="w-3.5 h-3.5" />
+                                                Pending Del
+                                              </button>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleStartDeleteRequest(primarySl, pos)}
+                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-all"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                Delete Item
+                                              </button>
+                                            )
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })() : (
                             <div className="flex items-center justify-center text-slate-400 py-3 text-xs italic font-medium">
                               No pallet stored on this shelf level
                             </div>
@@ -1182,6 +1429,117 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                 </div>
               </div>
             )
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── REQUEST DELETE DIALOG ────────────────────────────────── */}
+      <Dialog open={!!deletingLedger} onOpenChange={(open) => {
+        if (!open && !deleteSubmitting) setDeletingLedger(null);
+      }}>
+        <DialogContent className="max-w-md rounded-2xl p-6 bg-white shadow-2xl">
+          <DialogHeader className="border-b pb-4 mb-4">
+            <DialogTitle className="flex items-center gap-2.5 text-xl text-slate-800 font-bold">
+              <Trash2 className="w-5 h-5 text-red-600" />
+              Request Stock Deletion
+            </DialogTitle>
+          </DialogHeader>
+
+          {deletingLedger && (
+            <div className="space-y-4">
+              <div className="bg-red-50/50 border border-red-100 rounded-2xl p-4 space-y-2.5">
+                                                <div>
+                                                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product</h4>
+                                                  <p className="text-sm font-bold text-slate-800 leading-tight">
+                                                    {deletingLedger.ledger.product?.productName}
+                                                  </p>
+                                                  <p className="text-[10px] font-mono text-slate-500">
+                                                    {deletingLedger.ledger.product?.productCode}
+                                                  </p>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2.5 border-red-200/30">
+                                                  <div>
+                                                    <span className="text-slate-400 font-medium font-bold">Batch:</span>
+                                                    <p className="font-semibold text-slate-700 font-bold">{deletingLedger.ledger.batchNumber || "—"}</p>
+                                                  </div>
+                                                  <div>
+                                                    <span className="text-slate-400 font-medium font-bold">Location:</span>
+                                                    <p className="font-bold text-indigo-600">{deletingLedger.position.positionCode}</p>
+                                                  </div>
+                                                  <div className="mt-1 col-span-2">
+                                                    <span className="text-slate-400 font-medium font-bold">Quantity to Delete:</span>
+                                                    <p className="font-extrabold text-slate-800 text-sm">{deletingLedger.ledger.quantity} pcs</p>
+                                                  </div>
+                                                </div>
+                                              </div>
+
+                                              {deletingLedger.ledger.inboundReceiptId ? (
+                                                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-xl flex items-start gap-2 font-semibold">
+                                                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                                                  <div>
+                                                    <span className="font-bold text-amber-800">Important:</span> This item was received via Inbound GRN <span className="font-mono font-bold text-slate-900 bg-slate-100 px-1 rounded">{deletingLedger.ledger.inboundReceipt?.receiptNumber || "Unknown"}</span>.
+                                                    Deleting it will request the deletion of the entire Inbound Receipt, which will also delete any other stock items brought in by this receipt upon approval.
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className="text-xs text-red-700 bg-red-50 border border-red-100 p-3 rounded-xl flex items-start gap-2 font-semibold">
+                                                  <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-600" />
+                                                  <div>
+                                                    <span className="font-bold text-red-800">Warning:</span> This item does not have an associated Inbound Receipt. It will be deleted directly as a single stock record.
+                                                  </div>
+                                                </div>
+                                              )}
+
+              {deleteError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  Reason for Deletion
+                </label>
+                <textarea
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  placeholder="e.g., Damaged item, system discrepancy, expired batch..."
+                  rows={3}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-red-500 outline-none resize-none font-semibold text-slate-800"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setDeletingLedger(null)}
+                  disabled={deleteSubmitting}
+                  className="flex-1 py-2.5 border rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteRequest}
+                  disabled={deleteSubmitting}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:opacity-75"
+                >
+                  {deleteSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Submit Request
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -1202,59 +1560,100 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
             <div className="space-y-4">
               {/* Item Info Box */}
               <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-2.5">
-                <div>
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product</h4>
-                  <p className="text-sm font-bold text-slate-800 leading-tight">{movingItem.ledger.product.productName}</p>
-                  <p className="text-[10px] font-mono text-slate-500">{movingItem.ledger.product.productCode}</p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2.5 border-slate-200/50">
-                  <div>
-                    <span className="text-slate-400 font-medium">Batch Number:</span>
-                    <p className="font-semibold text-slate-700">{movingItem.ledger.batchNumber || "N/A"}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium">Current Location:</span>
-                    <p className="font-bold text-indigo-600">{movingItem.currentPosition.positionCode}</p>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-slate-400 font-medium">Total Qty:</span>
-                    <p className="font-semibold text-slate-700">{movingItem.ledger.quantity} pcs</p>
-                  </div>
-                  <div className="mt-1">
-                    <span className="text-slate-400 font-medium">Available (Unreserved):</span>
-                    <p className="font-bold text-emerald-600">
-                      {movingItem.ledger.quantity - (movingItem.ledger.reservedQty || 0)} pcs
-                    </p>
-                  </div>
-                </div>
+                {movingItem.isCollection ? (
+                  <>
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product (Group Collection)</h4>
+                      <p className="text-sm font-bold text-slate-800 leading-tight">{movingItem.productName}</p>
+                      <p className="text-[10px] font-mono text-slate-500">{movingItem.productCode}</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2.5 border-slate-200/50">
+                      <div>
+                        <span className="text-slate-400 font-medium">Collection Type:</span>
+                        <p className="font-semibold text-amber-700 font-bold">{movingItem.ledgersCount} stock records</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-medium">Current Location:</span>
+                        <p className="font-bold text-indigo-600">{movingItem.sourcePosition.positionCode}</p>
+                      </div>
+                      <div className="mt-1 col-span-2">
+                        <span className="text-slate-400 font-medium">Total Collection Qty:</span>
+                        <p className="font-extrabold text-slate-800 text-sm">{movingItem.totalQty} pcs</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Product</h4>
+                      <p className="text-sm font-bold text-slate-800 leading-tight">{movingItem.ledger.product.productName}</p>
+                      <p className="text-[10px] font-mono text-slate-500">{movingItem.ledger.product.productCode}</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-xs border-t pt-2.5 border-slate-200/50">
+                      <div>
+                        <span className="text-slate-400 font-medium">Batch Number:</span>
+                        <p className="font-semibold text-slate-700">{movingItem.ledger.batchNumber || "N/A"}</p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-medium">Current Location:</span>
+                        <p className="font-bold text-indigo-600">{movingItem.currentPosition.positionCode}</p>
+                      </div>
+                      <div className="mt-1">
+                        <span className="text-slate-400 font-medium">Total Qty:</span>
+                        <p className="font-semibold text-slate-700">{movingItem.ledger.quantity} pcs</p>
+                      </div>
+                      <div className="mt-1">
+                        <span className="text-slate-400 font-medium">Available (Unreserved):</span>
+                        <p className="font-bold text-emerald-600">
+                          {movingItem.ledger.quantity - (movingItem.ledger.reservedQty || 0)} pcs
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Quantity to Move */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
-                  Quantity to Move (pcs)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max={movingItem.ledger.quantity}
-                  value={moveQty}
-                  onChange={(e) => setMoveQty(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none font-bold text-slate-800"
-                />
-                <p className="text-[10px] text-slate-400 font-medium">
-                  {Number(moveQty) === movingItem.ledger.quantity ? (
-                    <span className="text-indigo-600 font-semibold">Full move:</span>
-                  ) : (
-                    <span className="text-amber-600 font-semibold">Partial move:</span>
-                  )}{" "}
-                  This will move {moveQty || 0} pcs. 
-                  {Number(moveQty) < movingItem.ledger.quantity && (
-                    <span> Remaining {movingItem.ledger.quantity - Number(moveQty)} pcs will stay.</span>
-                  )}
-                </p>
-              </div>
+              {/* Quantity to Move / Collection Notice */}
+              {movingItem.isCollection ? (
+                <div className="space-y-1.5 p-3.5 rounded-2xl bg-amber-50 border border-amber-100 text-amber-800 text-xs">
+                  <div className="flex gap-2">
+                    <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-900">Moving Collection</p>
+                      <p className="text-amber-850">
+                        This item represents a <strong>collection of {movingItem.ledgersCount} stock records</strong>. Confirming this move will transfer all associated records ({movingItem.totalQty} pcs) together.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide">
+                    Quantity to Move (pcs)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max={movingItem.ledger.quantity}
+                    value={moveQty}
+                    onChange={(e) => setMoveQty(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none font-bold text-slate-800"
+                  />
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {Number(moveQty) === movingItem.ledger.quantity ? (
+                      <span className="text-indigo-600 font-semibold">Full move:</span>
+                    ) : (
+                      <span className="text-amber-600 font-semibold">Partial move:</span>
+                    )}{" "}
+                    This will move {moveQty || 0} pcs. 
+                    {Number(moveQty) < movingItem.ledger.quantity && (
+                      <span> Remaining {movingItem.ledger.quantity - Number(moveQty)} pcs will stay.</span>
+                    )}
+                  </p>
+                </div>
+              )}
 
               {/* Move Destination Filters */}
               <div className="space-y-3.5 border-t pt-4">
@@ -1391,6 +1790,18 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                   </div>
                 </div>
               </div>
+
+              {targetProductDetails && (
+                <div className="flex items-start gap-2 p-3 rounded-xl bg-indigo-50 border border-indigo-150 text-indigo-700 text-xs">
+                  <Info className="w-4.5 h-4.5 text-indigo-600 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-bold text-indigo-800">Visual Merge Notice</p>
+                    <p>
+                      Target position already contains this product. Moving this item will visually combine it with the existing stock under the same product.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {moveError && (
                 <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs">
