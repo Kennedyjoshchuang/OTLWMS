@@ -41,6 +41,27 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
+  // Item Movement History state
+  const [movements, setMovements] = useState<any[]>([]);
+  const [movementsLoading, setMovementsLoading] = useState(false);
+  const [movementsTotal, setMovementsTotal] = useState(0);
+  const [movementsLimit, setMovementsLimit] = useState(10);
+  const [movementsOffset, setMovementsOffset] = useState(0);
+  const [movementsSearch, setMovementsSearch] = useState("");
+  const [movementsTypeFilter, setMovementsTypeFilter] = useState("all");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce the search query to prevent excessive API calls
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(movementsSearch);
+    }, 300);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [movementsSearch]);
+
   const { data: session } = useSession();
   const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/warehouse") : false;
 
@@ -276,6 +297,31 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     setMergeDifferingBatches(false);
   };
 
+  const fetchMovements = useCallback(async () => {
+    setMovementsLoading(true);
+    try {
+      const queryParams = new URLSearchParams({
+        limit: String(movementsLimit),
+        offset: String(movementsOffset),
+        type: movementsTypeFilter,
+        search: debouncedSearch,
+      });
+      const res = await fetch(`/api/warehouse/movements?${queryParams.toString()}`);
+      if (!res.ok) throw new Error("Failed to fetch movements history.");
+      const data = await res.json();
+      setMovements(data.movements || []);
+      setMovementsTotal(data.total || 0);
+    } catch (err) {
+      console.error("Error fetching movements:", err);
+    } finally {
+      setMovementsLoading(false);
+    }
+  }, [movementsLimit, movementsOffset, movementsTypeFilter, debouncedSearch]);
+
+  useEffect(() => {
+    fetchMovements();
+  }, [fetchMovements]);
+
   const fetchLayout = useCallback(async (showLoader = true): Promise<any> => {
     if (showLoader) setIsLoading(true);
     setFetchError("");
@@ -286,6 +332,8 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
       }
       const data = await res.json();
       setRacks(data);
+      // Fetch movements to keep history updated
+      fetchMovements();
       return data;
     } catch (err: any) {
       console.error("Error fetching warehouse layout:", err);
@@ -293,7 +341,7 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     } finally {
       if (showLoader) setIsLoading(false);
     }
-  }, []);
+  }, [fetchMovements]);
 
   // Fetch layout on mount to ensure we have the latest synced product data
   useEffect(() => {
@@ -1095,6 +1143,237 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
           </div>
 
         </div>
+      </div>
+
+      {/* ─── ITEM MOVEMENT HISTORY ────────────────────────────────────── */}
+      <div className="mt-8 bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm transition-colors duration-300">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          <div>
+            <h4 className="text-base font-bold text-slate-800 dark:text-zinc-100 flex items-center gap-2">
+              <Activity className="w-5 h-5 text-indigo-500" />
+              Item Movement History
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
+              Real-time log of inventory transactions and position transfers
+            </p>
+          </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-zinc-500" />
+              <input
+                type="text"
+                placeholder="Search product code/name/notes..."
+                value={movementsSearch}
+                onChange={(e) => {
+                  setMovementsSearch(e.target.value);
+                  setMovementsOffset(0); // Reset page on search
+                }}
+                className="pl-9 pr-4 py-2 text-xs border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-slate-700 dark:text-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-zinc-900 w-60 transition-all outline-none"
+              />
+            </div>
+
+            {/* Movement Type Filter */}
+            <select
+              value={movementsTypeFilter}
+              onChange={(e) => {
+                setMovementsTypeFilter(e.target.value);
+                setMovementsOffset(0); // Reset page on filter
+              }}
+              className="px-3 py-2 text-xs border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-950 text-slate-700 dark:text-zinc-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-zinc-900 transition-all cursor-pointer outline-none"
+            >
+              <option value="all">All Types</option>
+              <option value="inbound">Inbound</option>
+              <option value="outbound">Outbound</option>
+              <option value="transfer">Transfer</option>
+              <option value="adjustment">Adjustment</option>
+            </select>
+
+            {/* Refresh Button */}
+            <button
+              onClick={fetchMovements}
+              disabled={movementsLoading}
+              className="p-2 border border-slate-200 dark:border-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+              title="Refresh logs"
+            >
+              <RefreshCw className={`w-4 h-4 ${movementsLoading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* Table Container */}
+        <div className="overflow-x-auto border border-slate-100 dark:border-zinc-800 rounded-xl">
+          <table className="w-full text-left text-xs text-slate-600 dark:text-zinc-300">
+            <thead className="text-[10px] uppercase bg-slate-50 dark:bg-zinc-950 text-slate-500 dark:text-zinc-400 border-b border-slate-100 dark:border-zinc-800 font-semibold tracking-wider">
+              <tr>
+                <th className="px-5 py-3.5">Timestamp</th>
+                <th className="px-5 py-3.5">Type</th>
+                <th className="px-5 py-3.5">Product</th>
+                <th className="px-5 py-3.5">Qty</th>
+                <th className="px-5 py-3.5">Stock Shift</th>
+                <th className="px-5 py-3.5">Transaction Notes</th>
+                <th className="px-5 py-3.5">Operator</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-zinc-800 bg-white dark:bg-zinc-900">
+              {movementsLoading ? (
+                // Loading skeleton
+                Array.from({ length: movementsLimit }).map((_, idx) => (
+                  <tr key={idx} className="animate-pulse">
+                    <td className="px-5 py-4"><div className="h-3.5 bg-slate-100 dark:bg-zinc-800 rounded w-24"></div></td>
+                    <td className="px-5 py-4"><div className="h-5 bg-slate-100 dark:bg-zinc-800 rounded-full w-16"></div></td>
+                    <td className="px-5 py-4">
+                      <div className="h-3.5 bg-slate-100 dark:bg-zinc-800 rounded w-28 mb-1.5"></div>
+                      <div className="h-3 bg-slate-100 dark:bg-zinc-800 rounded w-44"></div>
+                    </td>
+                    <td className="px-5 py-4"><div className="h-3.5 bg-slate-100 dark:bg-zinc-800 rounded w-10"></div></td>
+                    <td className="px-5 py-4"><div className="h-3.5 bg-slate-100 dark:bg-zinc-800 rounded w-16"></div></td>
+                    <td className="px-5 py-4"><div className="h-3.5 bg-slate-100 dark:bg-zinc-800 rounded w-60"></div></td>
+                    <td className="px-5 py-4"><div className="h-3.5 bg-slate-100 dark:bg-zinc-800 rounded w-20"></div></td>
+                  </tr>
+                ))
+              ) : movements.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-5 py-12 text-center text-slate-400 dark:text-zinc-500">
+                    <Clock className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    <p className="font-semibold">No movement logs found</p>
+                    <p className="text-[11px] mt-0.5 opacity-80">Try adjusting your filters or search term</p>
+                  </td>
+                </tr>
+              ) : (
+                movements.map((m) => {
+                  // Get badge color based on movement type
+                  let badgeClass = "";
+                  let typeLabel = "";
+                  switch (m.movementType) {
+                    case "inbound":
+                      badgeClass = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50";
+                      typeLabel = "Inbound";
+                      break;
+                    case "outbound":
+                      badgeClass = "bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50";
+                      typeLabel = "Outbound";
+                      break;
+                    case "transfer":
+                      badgeClass = "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50";
+                      typeLabel = "Transfer";
+                      break;
+                    case "adjustment":
+                      badgeClass = "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50";
+                      typeLabel = "Adjustment";
+                      break;
+                    default:
+                      badgeClass = "bg-slate-50 text-slate-700 dark:bg-zinc-800/50 dark:text-zinc-300 border border-slate-100 dark:border-zinc-800";
+                      typeLabel = m.movementType;
+                  }
+
+                  return (
+                    <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800/40 transition-colors">
+                      {/* Timestamp */}
+                      <td className="px-5 py-3.5 whitespace-nowrap text-slate-500 dark:text-zinc-400 font-mono text-[11px]">
+                        {new Date(m.createdAt).toLocaleString(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </td>
+                      
+                      {/* Type Badge */}
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase ${badgeClass}`}>
+                          {typeLabel}
+                        </span>
+                      </td>
+
+                      {/* Product details */}
+                      <td className="px-5 py-3.5">
+                        <div className="font-semibold text-slate-800 dark:text-zinc-200">
+                          {m.product.productName}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5">
+                          <span>{m.product.productCode}</span>
+                          {m.batchNumber && (
+                            <>
+                              <span className="w-1 h-1 bg-slate-300 dark:bg-zinc-700 rounded-full"></span>
+                              <span>Batch: {m.batchNumber}</span>
+                            </>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Quantity */}
+                      <td className="px-5 py-3.5 font-bold font-mono text-slate-700 dark:text-zinc-300">
+                        {m.quantity} pcs
+                      </td>
+
+                      {/* Stock Shift (Before -> After) */}
+                      <td className="px-5 py-3.5 whitespace-nowrap font-mono text-[11px] text-slate-500 dark:text-zinc-400">
+                        <span className="text-slate-400 dark:text-zinc-500">{m.quantityBefore}</span>
+                        <span className="mx-1 text-slate-300 dark:text-zinc-600">→</span>
+                        <span className="font-semibold text-slate-700 dark:text-zinc-200">{m.quantityAfter}</span>
+                      </td>
+
+                      {/* Notes */}
+                      <td className="px-5 py-3.5 max-w-xs md:max-w-sm truncate text-slate-600 dark:text-zinc-300" title={m.notes}>
+                        {m.notes || "—"}
+                      </td>
+
+                      {/* Performed By / Operator */}
+                      <td className="px-5 py-3.5 whitespace-nowrap text-slate-600 dark:text-zinc-300">
+                        {m.performedBy ? (
+                          <div>
+                            <div className="font-semibold text-xs">{m.performedBy.fullName}</div>
+                            <div className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono mt-0.5">{m.performedBy.email}</div>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 dark:text-zinc-500 italic">System / Auto</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination Controls */}
+        {!movementsLoading && movementsTotal > movementsLimit && (
+          <div className="flex items-center justify-between mt-4 text-xs">
+            <div className="text-slate-500 dark:text-zinc-400 font-medium">
+              Showing{" "}
+              <span className="font-semibold text-slate-800 dark:text-zinc-100">
+                {movementsOffset + 1}
+              </span>{" "}
+              to{" "}
+              <span className="font-semibold text-slate-800 dark:text-zinc-100">
+                {Math.min(movementsOffset + movementsLimit, movementsTotal)}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-slate-800 dark:text-zinc-100">
+                {movementsTotal}
+              </span>{" "}
+              movements
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setMovementsOffset((prev) => Math.max(0, prev - movementsLimit))}
+                disabled={movementsOffset === 0}
+                className="px-3 py-1.5 border border-slate-200 dark:border-zinc-800 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-800 font-semibold text-slate-600 dark:text-zinc-300 transition-colors disabled:opacity-50 disabled:hover:bg-transparent cursor-pointer font-medium"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setMovementsOffset((prev) => Math.min(movementsTotal - 1, prev + movementsLimit))}
+                disabled={movementsOffset + movementsLimit >= movementsTotal}
+                className="px-3 py-1.5 border border-slate-200 dark:border-zinc-800 rounded-lg hover:bg-slate-50 dark:hover:bg-zinc-800 font-semibold text-slate-600 dark:text-zinc-300 transition-colors disabled:opacity-50 disabled:hover:bg-transparent cursor-pointer font-medium"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ─── DETAIL LEVEL STACK DIALOG ───────────────────────────── */}
