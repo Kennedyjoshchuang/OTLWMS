@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       weightKg,
       barcode,
       unit,
+      confirmReactivate,
     } = body;
 
     if (!customerId || !productCode || !productName) {
@@ -58,13 +59,49 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const normalizedProductCode = productCode.trim().toUpperCase();
+
     // Check duplicate code within customer
     const existing = await prisma.product.findUnique({
-      where: { customerId_productCode: { customerId, productCode } },
+      where: { customerId_productCode: { customerId, productCode: normalizedProductCode } },
     });
     if (existing) {
+      if (existing.isActive) {
+        return NextResponse.json(
+          { error: `Product code "${normalizedProductCode}" already exists for this customer.` },
+          { status: 409 }
+        );
+      }
+
+      // Product exists but is inactive
+      if (confirmReactivate === true) {
+        const updated = await prisma.product.update({
+          where: { id: existing.id },
+          data: {
+            productName: productName.trim(),
+            paintType: paintType?.trim() || null,
+            colorName: colorName?.trim() || null,
+            colorCode: colorCode?.trim() || null,
+            sizeLiter: sizeLiter ? Number(sizeLiter) : null,
+            weightKg: weightKg ? Number(weightKg) : null,
+            barcode: barcode?.trim() || null,
+            unit: unit?.trim() || "pcs",
+            isActive: true,
+          },
+          include: { customer: { select: { id: true, name: true, code: true } } },
+        });
+
+        // Invalidate next.js client-side router cache for the dashboard
+        revalidatePath("/dashboard", "layout");
+
+        return NextResponse.json(updated, { status: 200 });
+      }
+
       return NextResponse.json(
-        { error: `Product code "${productCode}" already exists for this customer.` },
+        {
+          error: "SOFT_DELETED_EXISTS",
+          message: `Product code "${normalizedProductCode}" already exists for this customer but is inactive. Do you want to restore and update it?`,
+        },
         { status: 409 }
       );
     }

@@ -89,6 +89,7 @@ export default function ProductsClient({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showReactivateWarning, setShowReactivateWarning] = useState(false);
 
   // Delete request state
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -132,6 +133,7 @@ export default function ProductsClient({
     setEditTarget(null);
     setSaveError("");
     setSaveSuccess(false);
+    setShowReactivateWarning(false);
     setModalMode("add");
   };
 
@@ -152,6 +154,7 @@ export default function ProductsClient({
     setEditTarget(p);
     setSaveError("");
     setSaveSuccess(false);
+    setShowReactivateWarning(false);
     setModalMode("edit");
   };
 
@@ -161,6 +164,7 @@ export default function ProductsClient({
     setEditTarget(null);
     setSaveError("");
     setSaveSuccess(false);
+    setShowReactivateWarning(false);
   };
 
   // ── Submit (add or edit)
@@ -179,7 +183,10 @@ export default function ProductsClient({
         res = await fetch("/api/products", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify({
+            ...form,
+            confirmReactivate: showReactivateWarning,
+          }),
         });
       } else {
         res = await fetch(`/api/products/${editTarget!.id}`, {
@@ -190,11 +197,23 @@ export default function ProductsClient({
       }
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal menyimpan.");
+      if (!res.ok) {
+        if (data.error === "SOFT_DELETED_EXISTS") {
+          setShowReactivateWarning(true);
+          throw new Error(data.message);
+        }
+        throw new Error(data.error || "Gagal menyimpan.");
+      }
 
       // Update local state
       if (modalMode === "add") {
-        setProducts((prev) => [data, ...prev]);
+        setProducts((prev) => {
+          const exists = prev.some((p) => p.id === data.id);
+          if (exists) {
+            return prev.map((p) => (p.id === data.id ? data : p));
+          }
+          return [data, ...prev];
+        });
       } else {
         setProducts((prev) => prev.map((p) => (p.id === data.id ? data : p)));
       }
@@ -240,8 +259,11 @@ export default function ProductsClient({
 
 
   // ── Form field helper
-  const setField = (key: keyof FormState, value: string) =>
+  const setField = (key: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setShowReactivateWarning(false);
+    setSaveError("");
+  };
 
   // ── Paint type suggestions
   const paintTypes = Array.from(new Set(products.map((p) => p.paintType).filter(Boolean)));
@@ -444,10 +466,24 @@ export default function ProductsClient({
             ) : (
               <form onSubmit={handleSubmit} className="p-6 space-y-5">
                 {/* Error */}
-                {saveError && (
+                {saveError && !showReactivateWarning && (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     {saveError}
+                  </div>
+                )}
+
+                {/* Soft-deleted product warning */}
+                {showReactivateWarning && (
+                  <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <p className="font-semibold">Restore Inactive Product?</p>
+                      <p className="text-xs opacity-90 leading-relaxed">
+                        This product code already exists under the selected customer but is currently deactivated (soft-deleted). 
+                        If you proceed, this product will be reactivated and its fields will be updated with the details you entered.
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -636,10 +672,16 @@ export default function ProductsClient({
                   <button
                     type="submit"
                     disabled={saving}
-                    className="flex-1 py-2.5 bg-primary hover:bg-primary-focus text-white rounded-xl font-semibold shadow-sm shadow-primary/20 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                    className={`flex-1 py-2.5 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70 ${
+                      showReactivateWarning 
+                        ? "bg-amber-600 hover:bg-amber-700 shadow-sm shadow-amber-600/20" 
+                        : "bg-primary hover:bg-primary-focus shadow-sm shadow-primary/20"
+                    }`}
                   >
                     {saving ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan…</>
+                    ) : showReactivateWarning ? (
+                      <><CheckCircle2 className="w-4 h-4" /> Restore & Update</>
                     ) : (
                       <><CheckCircle2 className="w-4 h-4" /> {modalMode === "add" ? "Simpan Produk" : "Update Produk"}</>
                     )}
