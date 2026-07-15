@@ -417,22 +417,24 @@ export default function DODetailClient({ data }: { data: PageData }) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between sm:justify-end gap-4 w-full sm:w-auto mt-2 sm:mt-0">
                   {/* Mini progress */}
-                  <div className="text-right hidden sm:block">
+                  <div className="text-left sm:text-right">
                     <p className="text-xs text-slate-400 font-semibold uppercase">Picked</p>
                     <p className={`font-bold text-sm ${itemDone ? "text-emerald-600" : "text-slate-800"}`}>
                       {item.pickedQty} / {item.delQtyPcs} {item.product?.unit || "pcs"}
                     </p>
                   </div>
-                  {!itemDone && (
-                    <span className="hidden sm:inline text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
-                      {remaining} remaining
-                    </span>
-                  )}
-                  {expanded[item.id]
-                    ? <ChevronUp className="w-4 h-4 text-slate-400" />
-                    : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  <div className="flex items-center gap-3">
+                    {!itemDone && (
+                      <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                        {remaining} remaining
+                      </span>
+                    )}
+                    {expanded[item.id]
+                      ? <ChevronUp className="w-4 h-4 text-slate-400" />
+                      : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  </div>
                 </div>
               </div>
 
@@ -445,104 +447,191 @@ export default function DODetailClient({ data }: { data: PageData }) {
                       <span>Tidak ada stok tersedia di gudang untuk produk ini.</span>
                     </div>
                   ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
-                          <tr>
-                            <th className="px-5 py-3 text-left">Lokasi Rack</th>
-                            <th className="px-5 py-3 text-left">Batch / Inbound Date</th>
-                            <th className="px-5 py-3 text-right">Stok Tersedia</th>
-                            <th className="px-5 py-3 text-center">Qty Ambil</th>
-                            <th className="px-5 py-3 text-right">Aksi</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                          {item.availableStock.map((stock) => {
-                            const key = `${item.id}__${stock.stockLedgerId}`;
-                            const inputVal = qtyInputs[key] ?? 0;
-                            const isLoading = pickingKey === key;
-                            const itemRemaining = item.delQtyPcs - item.pickedQty;
-                            const maxAllowed = Math.min(stock.availableQty, Math.max(0, itemRemaining));
+                    <div>
+                      {/* Mobile View */}
+                      <div className="block sm:hidden divide-y divide-slate-100">
+                        {item.availableStock.map((stock) => {
+                          const key = `${item.id}__${stock.stockLedgerId}`;
+                          const inputVal = qtyInputs[key] ?? 0;
+                          const isLoading = pickingKey === key;
+                          const itemRemaining = item.delQtyPcs - item.pickedQty;
+                          const maxAllowed = Math.min(stock.availableQty, Math.max(0, itemRemaining));
 
-                            return (
-                              <tr key={stock.stockLedgerId} className="hover:bg-indigo-50/30 transition-colors">
-                                {/* Location Badge */}
-                                <td className="px-5 py-3">
+                          return (
+                            <div key={stock.stockLedgerId} className="p-4 space-y-3 hover:bg-indigo-50/10 transition-colors">
+                              <div className="flex justify-between items-start">
+                                <div className="space-y-1">
                                   <span className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold font-mono px-3 py-1.5 rounded-lg">
                                     <MapPin className="w-3 h-3" />
                                     {stock.positionCode}
                                   </span>
-                                </td>
-
-                                {/* Batch + Date */}
-                                <td className="px-5 py-3">
-                                  <p className="text-xs font-mono text-slate-600">{stock.batchNumber || "—"}</p>
-                                  <p className="text-xs text-slate-400 mt-0.5">{formatDate(stock.inboundDate)}</p>
-                                </td>
-
-                                {/* Available Qty */}
-                                <td className="px-5 py-3 text-right">
-                                  <span className={`font-bold ${stock.availableQty > 0 ? "text-slate-800" : "text-red-500"}`}>
-                                    {stock.availableQty}
-                                  </span>
-                                  <span className="text-xs text-slate-400 ml-1">{item.product?.unit || "pcs"}</span>
-                                </td>
-
-                                {/* Qty Input */}
-                                <td className="px-5 py-3">
-                                  <div className="flex items-center justify-center gap-1.5">
-                                    <button
-                                      onClick={() => setQty(key, inputVal - 1, maxAllowed)}
-                                      className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
-                                      disabled={inputVal <= 0}
-                                    >
-                                      −
-                                    </button>
-                                    <input
-                                      type="number"
-                                      min={0}
-                                      max={maxAllowed}
-                                      value={inputVal || ""}
-                                      placeholder="0"
-                                      onChange={(e) => setQty(key, parseInt(e.target.value) || 0, maxAllowed)}
-                                      className="w-16 text-center py-1.5 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
-                                    />
-                                    <button
-                                      onClick={() => setQty(key, inputVal + 1, maxAllowed)}
-                                      className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
-                                      disabled={inputVal >= maxAllowed}
-                                    >
-                                      +
-                                    </button>
-                                    <button
-                                      onClick={() => setQty(key, maxAllowed, maxAllowed)}
-                                      className="text-xs text-indigo-500 hover:text-indigo-700 font-semibold ml-1 hover:underline"
-                                    >
-                                      Max
-                                    </button>
+                                  <div className="text-xs text-slate-500 mt-1">
+                                    <p className="font-mono">Batch: {stock.batchNumber || "—"}</p>
+                                    <p className="text-slate-400 mt-0.5">Inbound: {formatDate(stock.inboundDate)}</p>
                                   </div>
-                                </td>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Tersedia</p>
+                                  <p className="font-bold text-slate-800 text-sm mt-0.5">
+                                    <span className={stock.availableQty > 0 ? "text-slate-800" : "text-red-500"}>
+                                      {stock.availableQty}
+                                    </span>
+                                    <span className="text-xs text-slate-400 ml-1">{item.product?.unit || "pcs"}</span>
+                                  </p>
+                                </div>
+                              </div>
 
-                                {/* Pick Button */}
-                                <td className="px-5 py-3 text-right">
+                              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                <div className="flex items-center gap-1.5">
                                   <button
-                                    onClick={() => handlePick(item, stock)}
-                                    disabled={isLoading || inputVal <= 0 || stock.availableQty === 0 || itemRemaining <= 0}
-                                    className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-3 sm:py-2 rounded-xl transition-all shadow-sm w-full sm:w-auto"
+                                    onClick={() => setQty(key, inputVal - 1, maxAllowed)}
+                                    className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors font-bold text-base disabled:opacity-30"
+                                    disabled={inputVal <= 0}
                                   >
-                                    {isLoading ? (
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                    ) : (
-                                      <CheckCircle2 className="w-3.5 h-3.5" />
-                                    )}
-                                    Pick
+                                    −
                                   </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={maxAllowed}
+                                    value={inputVal || ""}
+                                    placeholder="0"
+                                    onChange={(e) => setQty(key, parseInt(e.target.value) || 0, maxAllowed)}
+                                    className="w-14 text-center py-1.5 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
+                                  />
+                                  <button
+                                    onClick={() => setQty(key, inputVal + 1, maxAllowed)}
+                                    className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors font-bold text-base disabled:opacity-30"
+                                    disabled={inputVal >= maxAllowed}
+                                  >
+                                    +
+                                  </button>
+                                  <button
+                                    onClick={() => setQty(key, maxAllowed, maxAllowed)}
+                                    className="text-xs text-indigo-500 hover:text-indigo-700 font-semibold ml-1 hover:underline"
+                                  >
+                                    Max
+                                  </button>
+                                </div>
+
+                                <button
+                                  onClick={() => handlePick(item, stock)}
+                                  disabled={isLoading || inputVal <= 0 || stock.availableQty === 0 || itemRemaining <= 0}
+                                  className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-sm"
+                                >
+                                  {isLoading ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  )}
+                                  Pick
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Desktop View */}
+                      <div className="hidden sm:block overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
+                            <tr>
+                              <th className="px-5 py-3 text-left">Lokasi Rack</th>
+                              <th className="px-5 py-3 text-left">Batch / Inbound Date</th>
+                              <th className="px-5 py-3 text-right">Stok Tersedia</th>
+                              <th className="px-5 py-3 text-center">Qty Ambil</th>
+                              <th className="px-5 py-3 text-right">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {item.availableStock.map((stock) => {
+                              const key = `${item.id}__${stock.stockLedgerId}`;
+                              const inputVal = qtyInputs[key] ?? 0;
+                              const isLoading = pickingKey === key;
+                              const itemRemaining = item.delQtyPcs - item.pickedQty;
+                              const maxAllowed = Math.min(stock.availableQty, Math.max(0, itemRemaining));
+
+                              return (
+                                <tr key={stock.stockLedgerId} className="hover:bg-indigo-50/30 transition-colors">
+                                  {/* Location Badge */}
+                                  <td className="px-5 py-3">
+                                    <span className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold font-mono px-3 py-1.5 rounded-lg">
+                                      <MapPin className="w-3 h-3" />
+                                      {stock.positionCode}
+                                    </span>
+                                  </td>
+
+                                  {/* Batch + Date */}
+                                  <td className="px-5 py-3">
+                                    <p className="text-xs font-mono text-slate-600">{stock.batchNumber || "—"}</p>
+                                    <p className="text-xs text-slate-400 mt-0.5">{formatDate(stock.inboundDate)}</p>
+                                  </td>
+
+                                  {/* Available Qty */}
+                                  <td className="px-5 py-3 text-right">
+                                    <span className={`font-bold ${stock.availableQty > 0 ? "text-slate-800" : "text-red-500"}`}>
+                                      {stock.availableQty}
+                                    </span>
+                                    <span className="text-xs text-slate-400 ml-1">{item.product?.unit || "pcs"}</span>
+                                  </td>
+
+                                  {/* Qty Input */}
+                                  <td className="px-5 py-3">
+                                    <div className="flex items-center justify-center gap-1.5">
+                                      <button
+                                        onClick={() => setQty(key, inputVal - 1, maxAllowed)}
+                                        className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
+                                        disabled={inputVal <= 0}
+                                      >
+                                        −
+                                      </button>
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={maxAllowed}
+                                        value={inputVal || ""}
+                                        placeholder="0"
+                                        onChange={(e) => setQty(key, parseInt(e.target.value) || 0, maxAllowed)}
+                                        className="w-16 text-center py-1.5 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-400 focus:border-transparent outline-none transition-all"
+                                      />
+                                      <button
+                                        onClick={() => setQty(key, inputVal + 1, maxAllowed)}
+                                        className="w-9 h-9 sm:w-7 sm:h-7 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 hover:border-slate-300 transition-colors font-bold text-base disabled:opacity-30"
+                                        disabled={inputVal >= maxAllowed}
+                                      >
+                                        +
+                                      </button>
+                                      <button
+                                        onClick={() => setQty(key, maxAllowed, maxAllowed)}
+                                        className="text-xs text-indigo-500 hover:text-indigo-700 font-semibold ml-1 hover:underline"
+                                      >
+                                        Max
+                                      </button>
+                                    </div>
+                                  </td>
+
+                                  {/* Pick Button */}
+                                  <td className="px-5 py-3 text-right">
+                                    <button
+                                      onClick={() => handlePick(item, stock)}
+                                      disabled={isLoading || inputVal <= 0 || stock.availableQty === 0 || itemRemaining <= 0}
+                                      className="inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-bold px-4 py-3 sm:py-2 rounded-xl transition-all shadow-sm w-full sm:w-auto"
+                                    >
+                                      {isLoading ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      ) : (
+                                        <CheckCircle2 className="w-3.5 h-3.5" />
+                                      )}
+                                      Pick
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -562,52 +651,101 @@ export default function DODetailClient({ data }: { data: PageData }) {
               <span className="ml-1 text-sm font-normal text-slate-400">({shippedItems.length} entri)</span>
             </h2>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
-                <tr>
-                  <th className="px-5 py-3 text-left">Produk</th>
-                  <th className="px-5 py-3 text-left">Dari Lokasi</th>
-                  <th className="px-5 py-3 text-left">Batch</th>
-                  <th className="px-5 py-3 text-right">Qty Picked</th>
-                  <th className="px-5 py-3 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {shippedItems.map((si) => (
-                  <tr key={si.id} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3">
+          <div>
+            {/* Mobile View */}
+            <div className="block sm:hidden divide-y divide-slate-100">
+              {shippedItems.map((si) => (
+                <div key={si.id} className="p-4 space-y-3 hover:bg-slate-50 transition-colors">
+                  <div className="flex justify-between items-start">
+                    <div>
                       <p className="font-bold text-slate-800 font-mono text-xs">{si.product.productCode}</p>
-                      <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[180px]">{si.product.productName}</p>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold font-mono px-2.5 py-1 rounded-lg">
-                        <MapPin className="w-3 h-3" />
-                        {si.positionCode}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-xs font-mono text-slate-500">{si.batchNumber || "—"}</td>
-                    <td className="px-5 py-3 text-right font-black text-slate-800">
-                      {si.pickedQty ?? si.requiredQty}
-                      <span className="text-xs font-normal text-slate-400 ml-1">{si.product.unit || "pcs"}</span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => handleUnpick(si)}
-                        disabled={unpickingId === si.id}
-                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-4 py-2.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors disabled:opacity-50"
-                        title="Batalkan picking & kembalikan stok"
-                      >
-                        {unpickingId === si.id
-                          ? <Loader2 className="w-3 h-3 animate-spin" />
-                          : <Undo2 className="w-3 h-3" />}
-                        Unpick
-                      </button>
-                    </td>
+                      <p className="text-xs text-slate-400 mt-0.5 max-w-[200px] truncate">{si.product.productName}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className="inline-flex items-center gap-1 bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold font-mono px-2 py-0.5 rounded-md">
+                          <MapPin className="w-3 h-3" />
+                          {si.positionCode}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-500">
+                          Batch: {si.batchNumber || "—"}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Qty Picked</p>
+                      <p className="font-black text-slate-800 text-sm mt-0.5">
+                        {si.pickedQty ?? si.requiredQty}
+                        <span className="text-xs font-normal text-slate-400 ml-1">{si.product.unit || "pcs"}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-1">
+                    <button
+                      onClick={() => handleUnpick(si)}
+                      disabled={unpickingId === si.id}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
+                      title="Batalkan picking & kembalikan stok"
+                    >
+                      {unpickingId === si.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Undo2 className="w-3 h-3" />
+                      )}
+                      Unpick
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop View */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
+                  <tr>
+                    <th className="px-5 py-3 text-left">Produk</th>
+                    <th className="px-5 py-3 text-left">Dari Lokasi</th>
+                    <th className="px-5 py-3 text-left">Batch</th>
+                    <th className="px-5 py-3 text-right">Qty Picked</th>
+                    <th className="px-5 py-3 text-right">Aksi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {shippedItems.map((si) => (
+                    <tr key={si.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3">
+                        <p className="font-bold text-slate-800 font-mono text-xs">{si.product.productCode}</p>
+                        <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[180px]">{si.product.productName}</p>
+                      </td>
+                      <td className="px-5 py-3">
+                        <span className="inline-flex items-center gap-1.5 bg-slate-100 border border-slate-200 text-slate-600 text-xs font-bold font-mono px-2.5 py-1 rounded-lg">
+                          <MapPin className="w-3 h-3" />
+                          {si.positionCode}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-xs font-mono text-slate-500">{si.batchNumber || "—"}</td>
+                      <td className="px-5 py-3 text-right font-black text-slate-800">
+                        {si.pickedQty ?? si.requiredQty}
+                        <span className="text-xs font-normal text-slate-400 ml-1">{si.product.unit || "pcs"}</span>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <button
+                          onClick={() => handleUnpick(si)}
+                          disabled={unpickingId === si.id}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-200 px-4 py-2.5 sm:px-3 sm:py-1.5 rounded-xl transition-colors disabled:opacity-50"
+                          title="Batalkan picking & kembalikan stok"
+                        >
+                          {unpickingId === si.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : <Undo2 className="w-3 h-3" />}
+                          Unpick
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

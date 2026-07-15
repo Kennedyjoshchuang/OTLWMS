@@ -97,10 +97,22 @@ export async function PATCH(
         for (const pi of DO.pickingItems) {
           if (pi.status === "shipped") {
             const qtyRestored = pi.pickedQty ?? pi.requiredQty;
-            await prisma.stockLedger.update({
+            const stock = await prisma.stockLedger.findUnique({
               where: { id: pi.stockLedgerId },
-              data: { quantity: { increment: qtyRestored } }
+              include: { product: true }
             });
+            if (stock) {
+              const sizeLiter = stock.product?.sizeLiter || 0;
+              const addedLiter = qtyRestored * sizeLiter;
+              
+              await prisma.stockLedger.update({
+                where: { id: pi.stockLedgerId },
+                data: {
+                  quantity: { increment: qtyRestored },
+                  quantityLiter: { increment: addedLiter }
+                }
+              });
+            }
             await prisma.deliveryTicketItem.update({
               where: { id: pi.dtItemId },
               data: { deliveredQty: { decrement: qtyRestored } }

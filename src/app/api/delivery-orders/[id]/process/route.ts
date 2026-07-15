@@ -29,6 +29,7 @@ export async function POST(
         // Fetch current stock ledger
         const stock = await tx.stockLedger.findUnique({
           where: { id: item.stockLedgerId },
+          include: { product: true }
         });
 
         if (!stock) continue;
@@ -37,12 +38,15 @@ export async function POST(
         const qtyPicked = item.requiredQty;
         const newQty = Math.max(0, stock.quantity - qtyPicked);
         const newReservedQty = Math.max(0, stock.reservedQty - qtyPicked);
+        const sizeLiter = stock.product?.sizeLiter || 0;
+        const newQtyLiter = newQty * sizeLiter;
 
         // Update StockLedger
         await tx.stockLedger.update({
           where: { id: stock.id },
           data: {
             quantity: newQty,
+            quantityLiter: newQtyLiter,
             reservedQty: newReservedQty,
             isReserved: newReservedQty > 0,
           },

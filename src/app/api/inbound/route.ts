@@ -129,6 +129,23 @@ export async function POST(req: NextRequest) {
           }
         });
 
+        // Create Stock Movement log
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            palletPositionId: availablePosition.id,
+            movementType: "inbound",
+            quantity: Number(item.qty),
+            quantityBefore: 0,
+            quantityAfter: Number(item.qty),
+            batchNumber: item.batchNumber || null,
+            referenceType: "inbound_receipt",
+            referenceId: newReceipt.id,
+            notes: "Inbound receipt check-in",
+            createdAt: newReceipt.receivedDate,
+          }
+        });
+
         // Mark PalletPosition as occupied
         await tx.palletPosition.update({
           where: { id: availablePosition.id },

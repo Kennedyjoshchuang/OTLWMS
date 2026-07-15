@@ -52,15 +52,19 @@ export async function GET(request: Request) {
 
     // 1. Fetch Inbound (GRN) within period
     const inbounds = await prisma.inboundReceipt.findMany({
-      where: { createdAt: { gte: prismaStartDate, lte: prismaEndDate } },
-      include: {
-        stockLedgers: { include: { product: true } }
-      }
+      where: { createdAt: { gte: prismaStartDate, lte: prismaEndDate } }
     });
 
     // 2. Fetch Outbound (DO) within period based on creation or delivery
     const outbounds = await prisma.deliveryOrder.findMany({
-      where: { createdAt: { gte: prismaStartDate, lte: prismaEndDate } },
+      where: {
+        OR: [
+          { createdAt: { gte: prismaStartDate, lte: prismaEndDate } },
+          { deliveryDate: { gte: prismaStartDate, lte: prismaEndDate } },
+          { shippedAt: { gte: prismaStartDate, lte: prismaEndDate } },
+          { deliveredAt: { gte: prismaStartDate, lte: prismaEndDate } }
+        ]
+      },
       include: { 
         customer: true, 
         deliveryTicket: {
@@ -69,14 +73,24 @@ export async function GET(request: Request) {
       }
     });
 
+    const getDORelevantDate = (o: any): Date => {
+      return o.deliveredAt || o.shippedAt || o.deliveryDate || o.createdAt;
+    };
+
     // Delivered outbounds (shipped or delivered status within period)
-    const deliveredDOs = outbounds.filter(o => 
-      o.status === "delivered" || o.status === "on_delivery"
-    );
+    const deliveredDOs = outbounds.filter(o => {
+      const isDeliveredStatus = o.status === "delivered" || o.status === "on_delivery";
+      if (!isDeliveredStatus) return false;
+      const relevantDate = getDORelevantDate(o);
+      return relevantDate >= prismaStartDate && relevantDate <= prismaEndDate;
+    });
 
     // 3. Pending Deliveries
     const pendingDOs = await prisma.deliveryOrder.findMany({
-      where: { status: { in: ["draft", "picking", "ready_to_ship", "on_delivery"] } },
+      where: { 
+        status: { in: ["draft", "picking", "ready_to_ship", "on_delivery"] },
+        createdAt: { gte: prismaStartDate, lte: prismaEndDate }
+      },
       include: { 
         customer: true, 
         deliveryTicket: {
@@ -88,7 +102,10 @@ export async function GET(request: Request) {
 
     // 4. Warehouse Stock Snapshot (Liters)
     const stockLedgers = await prisma.stockLedger.findMany({
-      where: { quantity: { gt: 0 } },
+      where: { 
+        quantity: { gt: 0 },
+        inboundDate: { gte: prismaStartDate, lte: prismaEndDate }
+      },
       include: { 
         product: true,
         palletPosition: {
@@ -98,7 +115,6 @@ export async function GET(request: Request) {
     });
     const totalWarehouseStock = stockLedgers.reduce((sum, sl) => sum + (sl.quantity * (sl.product?.sizeLiter || 0)), 0);
 
-    const calcInboundLiter = (i: any) => i.stockLedgers?.reduce((acc: number, sl: any) => acc + (sl.quantity * (sl.product?.sizeLiter || 0)), 0) || 0;
     const calcOutboundLiter = (o: any) => o.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + (it.delQtyPcs * (it.product?.sizeLiter || 0)), 0) || 0;
 
     // Unique customers delivered to in this period
@@ -147,14 +163,14 @@ export async function GET(request: Request) {
       let outboundLiters = 0;
 
       if (period === "daily") {
-        inboundLiters = inbounds.filter(i => isSameHour(toZonedTime(new Date(i.createdAt), TIME_ZONE), intervalDate)).reduce((sum, i) => sum + calcInboundLiter(i), 0);
-        outboundLiters = outbounds.filter(o => isSameHour(toZonedTime(new Date(o.createdAt), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+        inboundLiters = inbounds.filter(i => isSameHour(toZonedTime(new Date(i.createdAt), TIME_ZONE), intervalDate)).reduce((sum, i) => sum + (i.totalLiterReceived || 0), 0);
+        outboundLiters = deliveredDOs.filter(o => isSameHour(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
       } else if (period === "weekly" || period === "monthly" || (period === "custom" && customGroupMode === "day")) {
-        inboundLiters = inbounds.filter(i => isSameDay(toZonedTime(new Date(i.createdAt), TIME_ZONE), intervalDate)).reduce((sum, i) => sum + calcInboundLiter(i), 0);
-        outboundLiters = outbounds.filter(o => isSameDay(toZonedTime(new Date(o.createdAt), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+        inboundLiters = inbounds.filter(i => isSameDay(toZonedTime(new Date(i.createdAt), TIME_ZONE), intervalDate)).reduce((sum, i) => sum + (i.totalLiterReceived || 0), 0);
+        outboundLiters = deliveredDOs.filter(o => isSameDay(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
       } else if (period === "yearly" || (period === "custom" && customGroupMode === "month")) {
-        inboundLiters = inbounds.filter(i => isSameMonth(toZonedTime(new Date(i.createdAt), TIME_ZONE), intervalDate)).reduce((sum, i) => sum + calcInboundLiter(i), 0);
-        outboundLiters = outbounds.filter(o => isSameMonth(toZonedTime(new Date(o.createdAt), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+        inboundLiters = inbounds.filter(i => isSameMonth(toZonedTime(new Date(i.createdAt), TIME_ZONE), intervalDate)).reduce((sum, i) => sum + (i.totalLiterReceived || 0), 0);
+        outboundLiters = deliveredDOs.filter(o => isSameMonth(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
       }
 
       return {
@@ -165,24 +181,35 @@ export async function GET(request: Request) {
     });
 
     // Summary Totals
-    const totalInboundLiters = inbounds.reduce((sum, i) => sum + calcInboundLiter(i), 0);
-    const totalOutboundLiters = outbounds.reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+    const totalInboundLiters = inbounds.reduce((sum, i) => sum + (i.totalLiterReceived || 0), 0);
+    const totalOutboundLiters = deliveredDOs.reduce((sum, o) => sum + calcOutboundLiter(o), 0);
 
     // --- Detailed Reporting ---
     
+    // Fetch Inbound Stock Movements within period
+    const inboundMovements = await prisma.stockMovement.findMany({
+      where: {
+        movementType: "inbound",
+        createdAt: { gte: prismaStartDate, lte: prismaEndDate }
+      },
+      include: {
+        product: true
+      }
+    });
+
     // Inbound details (grouped by product)
     const inboundProductMap = new Map<string, { productCode: string, productName: string, pcs: number, liter: number }>();
-    inbounds.forEach(receipt => {
-      receipt.stockLedgers.forEach(sl => {
-        const p = sl.product;
+    inboundMovements.forEach(m => {
+      const p = m.product;
+      if (p) {
         const key = p.id;
         if (!inboundProductMap.has(key)) {
           inboundProductMap.set(key, { productCode: p.productCode, productName: p.productName, pcs: 0, liter: 0 });
         }
         const current = inboundProductMap.get(key)!;
-        current.pcs += sl.quantity;
-        current.liter += (sl.quantity * (p.sizeLiter || 0));
-      });
+        current.pcs += m.quantity;
+        current.liter += (m.quantity * (p.sizeLiter || 0));
+      }
     });
     const inboundDetails = Array.from(inboundProductMap.values()).sort((a, b) => b.liter - a.liter);
 
