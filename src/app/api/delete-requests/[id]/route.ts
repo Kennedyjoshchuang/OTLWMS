@@ -105,6 +105,20 @@ export async function PATCH(
               where: { id: pi.dtItemId },
               data: { deliveredQty: { decrement: qtyRestored } }
             });
+          } else if (pi.status === "pending") {
+            const stock = await prisma.stockLedger.findUnique({
+              where: { id: pi.stockLedgerId }
+            });
+            if (stock) {
+              const newReservedQty = Math.max(0, stock.reservedQty - pi.requiredQty);
+              await prisma.stockLedger.update({
+                where: { id: stock.id },
+                data: {
+                  reservedQty: newReservedQty,
+                  isReserved: newReservedQty > 0
+                }
+              });
+            }
           }
           await prisma.dOPickingItem.delete({ where: { id: pi.id } });
         }

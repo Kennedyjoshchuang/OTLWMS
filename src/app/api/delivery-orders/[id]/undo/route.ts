@@ -38,15 +38,36 @@ export async function POST(
       );
     }
 
-    // Delete any pending picking items just in case
-    await prisma.dOPickingItem.deleteMany({
-      where: { deliveryOrderId: id, status: "pending" }
-    });
+    const pendingItems = DO.pickingItems.filter(item => item.status === "pending");
 
-    // Update status to draft
-    const updated = await prisma.deliveryOrder.update({
-      where: { id },
-      data: { status: "draft" },
+    const updated = await prisma.$transaction(async (tx) => {
+      // 1. Decrement reservedQty for pending items
+      for (const pi of pendingItems) {
+        const stock = await tx.stockLedger.findUnique({
+          where: { id: pi.stockLedgerId }
+        });
+        if (stock) {
+          const newReservedQty = Math.max(0, stock.reservedQty - pi.requiredQty);
+          await tx.stockLedger.update({
+            where: { id: stock.id },
+            data: {
+              reservedQty: newReservedQty,
+              isReserved: newReservedQty > 0
+            }
+          });
+        }
+      }
+
+      // 2. Delete any pending picking items just in case
+      await tx.dOPickingItem.deleteMany({
+        where: { deliveryOrderId: id, status: "pending" }
+      });
+
+      // 3. Update status to draft
+      return await tx.deliveryOrder.update({
+        where: { id },
+        data: { status: "draft" },
+      });
     });
 
     return NextResponse.json({ success: true, order: updated });

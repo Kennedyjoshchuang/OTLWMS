@@ -4,10 +4,18 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import { useTheme } from "next-themes";
 import { DictionaryKey } from "@/lib/i18n/dictionaries";
-import { Loader2, ArrowDownToLine, ArrowUpFromLine, Users, Clock, AlertTriangle, Printer, Package, Box, Database } from "lucide-react";
+import { Loader2, ArrowDownToLine, ArrowUpFromLine, Users, Clock, AlertTriangle, Printer, Package, Box, Database, FileSpreadsheet } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer
 } from "recharts";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 type Period = "daily" | "weekly" | "monthly" | "yearly" | "custom";
 
@@ -42,6 +50,107 @@ export default function AnalyticsClient() {
   const [customRange, setCustomRange] = useState<{start: string, end: string}>({ start: "", end: "" });
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Excel export states
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportSections, setExportSections] = useState({
+    inbound: true,
+    outboundProducts: true,
+    stock: true,
+    delivered: true,
+    pending: true
+  });
+
+  const handleExcelExport = async () => {
+    if (!data) return;
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.utils.book_new();
+      let hasData = false;
+
+      if (exportSections.inbound) {
+        const inboundRows = data.details.inbound.map(item => ({
+          [t('table.col.product_code')]: item.productCode,
+          [t('table.col.product_name')]: item.productName,
+          [t('table.col.total_pcs')]: item.pcs,
+          [t('table.col.total_volume')]: item.liter
+        }));
+        const ws = XLSX.utils.json_to_sheet(inboundRows);
+        XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.inbound').substring(0, 31));
+        hasData = true;
+      }
+
+      if (exportSections.outboundProducts) {
+        const outboundProdRows = data.details.outboundProducts.map(item => ({
+          [t('table.col.product_code')]: item.productCode,
+          [t('table.col.product_name')]: item.productName,
+          [t('table.col.total_pcs')]: item.pcs,
+          [t('table.col.total_volume')]: item.liter
+        }));
+        const ws = XLSX.utils.json_to_sheet(outboundProdRows);
+        XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.outbound_products').substring(0, 31));
+        hasData = true;
+      }
+
+      if (exportSections.stock) {
+        const stockRows = data.details.stock.map(item => ({
+          [t('table.col.product_code')]: item.productCode,
+          [t('table.col.product_name')]: item.productName,
+          [t('table.col.location')]: item.location,
+          [t('table.col.stock_pcs')]: item.pcs,
+          [t('table.col.volume')]: item.liter
+        }));
+        const ws = XLSX.utils.json_to_sheet(stockRows);
+        XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.stock').substring(0, 31));
+        hasData = true;
+      }
+
+      if (exportSections.delivered) {
+        const deliveredRows = data.details.outbound.map(item => ({
+          [t('table.col.do_number')]: item.doNumber,
+          [t('table.col.customer')]: item.customerName,
+          [t('table.col.destination')]: item.destination,
+          [t('table.col.date')]: new Date(item.deliveryDate).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US'),
+          [t('table.col.total_pcs')]: item.totalPcs,
+          [t('table.col.volume')]: item.totalLiter
+        }));
+        const ws = XLSX.utils.json_to_sheet(deliveredRows);
+        XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.delivered').substring(0, 31));
+        hasData = true;
+      }
+
+      if (exportSections.pending) {
+        const pendingRows = data.details.pending.map(item => ({
+          [t('table.col.do_number')]: item.doNumber,
+          [t('table.col.customer')]: item.customerName,
+          [t('table.col.destination')]: item.destination,
+          [t('table.col.status')]: item.status.replace(/_/g, ' '),
+          [t('table.col.created')]: new Date(item.createdAt).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US'),
+          [t('table.col.total_pcs')]: item.totalPcs,
+          [t('table.col.volume')]: item.totalLiter
+        }));
+        const ws = XLSX.utils.json_to_sheet(pendingRows);
+        XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.pending').substring(0, 31));
+        hasData = true;
+      }
+
+      if (!hasData) return;
+
+      const excelBuffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([excelBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      link.setAttribute("download", `analytics_report_${period}_${dateStr}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setIsExportModalOpen(false);
+    } catch (err) {
+      console.error("Failed to export Excel", err);
+    }
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -108,6 +217,13 @@ export default function AnalyticsClient() {
           >
             <Printer className="w-4 h-4" />
             {t('analytics.export_pdf')}
+          </button>
+          <button 
+            onClick={() => setIsExportModalOpen(true)}
+            className="px-4 py-2 rounded-full text-sm font-medium bg-emerald-700 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white transition-colors shadow-md flex items-center gap-2"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {t('analytics.export_excel')}
           </button>
         </div>
       </div>
@@ -355,6 +471,79 @@ export default function AnalyticsClient() {
           )}
         </>
       )}
+
+      <Dialog open={isExportModalOpen} onOpenChange={setIsExportModalOpen}>
+        <DialogContent className="max-w-md bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl shadow-xl p-6 transition-colors duration-300">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-slate-900 dark:text-zinc-100 flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5 text-emerald-600 dark:text-emerald-500" />
+              {t('analytics.export_modal_title')}
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500 dark:text-zinc-400 mt-2">
+              {t('analytics.export_modal_desc')}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Quick actions */}
+          <div className="flex items-center gap-2 my-2">
+            <button
+              onClick={() => setExportSections({ inbound: true, outboundProducts: true, stock: true, delivered: true, pending: true })}
+              className="text-xs font-semibold px-2.5 py-1.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+            >
+              {t('analytics.select_all')}
+            </button>
+            <button
+              onClick={() => setExportSections({ inbound: false, outboundProducts: false, stock: false, delivered: false, pending: false })}
+              className="text-xs font-semibold px-2.5 py-1.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
+            >
+              {t('analytics.clear_all')}
+            </button>
+          </div>
+
+          {/* Checkbox list */}
+          <div className="space-y-3 my-4">
+            {[
+              { key: "inbound" as const, label: t('analytics.sections.inbound') },
+              { key: "outboundProducts" as const, label: t('analytics.sections.outbound_products') },
+              { key: "stock" as const, label: t('analytics.sections.stock') },
+              { key: "delivered" as const, label: t('analytics.sections.delivered') },
+              { key: "pending" as const, label: t('analytics.sections.pending') },
+            ].map((section) => (
+              <label
+                key={section.key}
+                className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800/50 cursor-pointer transition-all duration-200"
+              >
+                <input
+                  type="checkbox"
+                  checked={exportSections[section.key]}
+                  onChange={(e) => setExportSections(prev => ({ ...prev, [section.key]: e.target.checked }))}
+                  className="w-4 h-4 rounded border-slate-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500/50 cursor-pointer accent-emerald-600"
+                />
+                <span className="text-sm font-medium text-slate-700 dark:text-zinc-200">
+                  {section.label}
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <DialogFooter className="flex items-center gap-2 mt-6 justify-end">
+            <button
+              onClick={() => setIsExportModalOpen(false)}
+              className="px-4 py-2 rounded-full text-sm font-medium bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-slate-700 dark:text-zinc-300 transition-colors cursor-pointer"
+            >
+              {t('analytics.cancel_btn')}
+            </button>
+            <button
+              onClick={handleExcelExport}
+              disabled={!Object.values(exportSections).some(Boolean)}
+              className="px-4 py-2 rounded-full text-sm font-medium bg-emerald-600 dark:bg-emerald-500 text-white hover:bg-emerald-700 dark:hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-md flex items-center gap-2 cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              {t('analytics.export_btn')}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
