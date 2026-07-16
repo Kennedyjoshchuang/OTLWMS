@@ -44,7 +44,7 @@ export const dictionaries = {
     "kpi.inbound": "Inbound",
     "kpi.outbound": "Outbound",
     "kpi.warehouse_stock": "Warehouse Stock",
-    "kpi.delivered_customer": "Delivered Customer",
+    "kpi.delivered_orders": "Delivered Orders",
     "kpi.pending_delivery": "Pending Delivery",
     "kpi.accident": "Accident",
     
@@ -121,7 +121,7 @@ export const dictionaries = {
     "kpi.inbound": "Inbound",
     "kpi.outbound": "Outbound",
     "kpi.warehouse_stock": "Stok Gudang",
-    "kpi.delivered_customer": "Pelanggan Terkirim",
+    "kpi.delivered_orders": "Pesanan Terkirim",
     "kpi.pending_delivery": "Pengiriman Tertunda",
     "kpi.accident": "Kecelakaan",
     

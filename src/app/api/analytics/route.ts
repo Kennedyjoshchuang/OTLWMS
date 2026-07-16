@@ -86,21 +86,24 @@ export async function GET(request: Request) {
     });
 
     const getDORelevantDate = (o: any): Date => {
+      if (o.status === "on_delivery") {
+        return o.shippedAt || o.deliveryDate || o.createdAt;
+      }
       return o.deliveredAt || o.shippedAt || o.deliveryDate || o.createdAt;
     };
 
-    // Delivered outbounds (shipped or delivered status within period)
+    // Delivered outbounds (only status "on_delivery" represents actual delivered orders)
     const deliveredDOs = outbounds.filter(o => {
-      const isDeliveredStatus = o.status === "delivered" || o.status === "on_delivery";
+      const isDeliveredStatus = o.status === "on_delivery";
       if (!isDeliveredStatus) return false;
       const relevantDate = getDORelevantDate(o);
       return relevantDate >= prismaStartDate && relevantDate <= prismaEndDate;
     });
 
-    // 3. Pending Deliveries
+    // 3. Pending Deliveries (status "delivered" represents Picked - Ready to Deliver)
     const pendingDOs = await prisma.deliveryOrder.findMany({
       where: { 
-        status: { in: ["draft", "picking", "ready_to_ship", "on_delivery"] },
+        status: "delivered",
         createdAt: { gte: prismaStartDate, lte: prismaEndDate }
       },
       include: { 
@@ -113,10 +116,9 @@ export async function GET(request: Request) {
     const pendingDeliveriesCount = pendingDOs.length;
 
     // 4. Warehouse Stock Snapshot (Liters)
-    const stockLedgers = await prisma.stockLedger.findMany({
+    const stockLedgersDb = await prisma.stockLedger.findMany({
       where: { 
-        quantity: { gt: 0 },
-        inboundDate: { gte: prismaStartDate, lte: prismaEndDate }
+        inboundDate: { lte: prismaEndDate }
       },
       include: { 
         product: true,
@@ -125,6 +127,33 @@ export async function GET(request: Request) {
         }
       }
     });
+
+    const outboundMovementsAfter = await prisma.stockMovement.findMany({
+      where: {
+        movementType: "outbound",
+        createdAt: { gt: prismaEndDate }
+      }
+    });
+
+    const outboundMap = new Map<string, number>();
+    for (const m of outboundMovementsAfter) {
+      const key = `${m.productId}-${m.palletPositionId || ""}-${m.batchNumber || ""}`;
+      outboundMap.set(key, (outboundMap.get(key) || 0) + m.quantity);
+    }
+
+    const stockLedgers = stockLedgersDb.map(sl => {
+      const key = `${sl.productId}-${sl.palletPositionId}-${sl.batchNumber || ""}`;
+      const addedQty = outboundMap.get(key) || 0;
+      const reconstructedQty = sl.quantity + addedQty;
+      const reconstructedQtyLiter = reconstructedQty * (sl.product?.sizeLiter || 0);
+
+      return {
+        ...sl,
+        quantity: reconstructedQty,
+        quantityLiter: reconstructedQtyLiter
+      };
+    }).filter(sl => sl.quantity > 0);
+
     const totalWarehouseStock = stockLedgers.reduce((sum, sl) => sum + (sl.quantity * (sl.product?.sizeLiter || 0)), 0);
 
     const calcOutboundLiter = (o: any) => o.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + (it.delQtyPcs * (it.product?.sizeLiter || 0)), 0) || 0;
@@ -285,7 +314,7 @@ export async function GET(request: Request) {
         inbound: totalInboundLiters,
         outbound: totalOutboundLiters,
         warehouseStock: totalWarehouseStock,
-        deliveredCustomers: uniqueCustomers.size,
+        deliveredOrders: deliveredDOs.length,
         pendingDeliveries: pendingDeliveriesCount,
         accidents: incidentsCount
       },

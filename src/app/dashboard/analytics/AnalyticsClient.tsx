@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import { useTheme } from "next-themes";
 import { DictionaryKey } from "@/lib/i18n/dictionaries";
-import { Loader2, ArrowDownToLine, ArrowUpFromLine, Users, Clock, AlertTriangle, Printer, Package, Box, Database, FileSpreadsheet } from "lucide-react";
+import { Loader2, ArrowDownToLine, ArrowUpFromLine, Clock, AlertTriangle, Printer, Package, Box, Database, FileSpreadsheet, CheckCircle2 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer
 } from "recharts";
@@ -24,7 +24,7 @@ interface AnalyticsData {
     inbound: number;
     outbound: number;
     warehouseStock: number;
-    deliveredCustomers: number;
+    deliveredOrders: number;
     pendingDeliveries: number;
     accidents: number;
   };
@@ -263,7 +263,7 @@ export default function AnalyticsClient() {
               { label: t('kpi.inbound'), value: `${data?.summary?.inbound?.toLocaleString() || 0} L`, icon: Box, color: "text-emerald-500", bg: "bg-emerald-100 dark:bg-emerald-500/20" },
               { label: t('kpi.outbound'), value: `${data?.summary?.outbound?.toLocaleString() || 0} L`, icon: Package, color: "text-blue-500", bg: "bg-blue-100 dark:bg-blue-500/20" },
               { label: t('kpi.warehouse_stock'), value: `${data?.summary?.warehouseStock?.toLocaleString() || 0} L`, icon: Database, color: "text-purple-500", bg: "bg-purple-100 dark:bg-purple-500/20" },
-              { label: t('kpi.delivered_customer'), value: data?.summary?.deliveredCustomers || 0, icon: Users, color: "text-amber-500", bg: "bg-amber-100 dark:bg-amber-500/20" },
+              { label: t('kpi.delivered_orders'), value: data?.summary?.deliveredOrders || 0, icon: CheckCircle2, color: "text-amber-500", bg: "bg-amber-100 dark:bg-amber-500/20" },
               { label: t('kpi.pending_delivery'), value: data?.summary?.pendingDeliveries || 0, icon: Clock, color: "text-orange-500", bg: "bg-orange-100 dark:bg-orange-500/20" },
               { label: t('kpi.accident'), value: data?.summary?.accidents || 0, icon: AlertTriangle, color: "text-red-500", bg: "bg-red-100 dark:bg-red-500/20" },
             ].map((stat, i) => (
