@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Printer, FileText, MapPin, Package, CheckCircle2, Clock, Trash2, Loader2, AlertCircle, AlertTriangle, MessageSquare, Undo2 } from "lucide-react";
+import { ArrowLeft, Printer, FileText, MapPin, Package, CheckCircle2, Clock, Trash2, Loader2, AlertCircle, AlertTriangle, MessageSquare, Undo2, Edit } from "lucide-react";
 import OmegaDTPrintView from "./OmegaDTPrintView";
+import { useSession } from "next-auth/react";
+import { hasWriteAccess } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 interface Location {
   positionCode: string;
@@ -24,6 +27,8 @@ interface DTItem {
   delQtyLiter: number | null;
   status: string;
   locations: Location[];
+  deliveredQty?: number;
+  pickingItems?: { pickedQty: number }[];
 }
 
 interface Ticket {
@@ -91,6 +96,64 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
 
   const [undoing, setUndoing] = useState(false);
   const [undoError, setUndoError] = useState("");
+
+  const { data: session } = useSession();
+  const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/delivery-tickets") : false;
+
+  const [editingItem, setEditingItem] = useState<DTItem | null>(null);
+  const [editQty, setEditQty] = useState<number>(0);
+  const [editBatch, setEditBatch] = useState<string>("");
+  const [editProductId, setEditProductId] = useState<string>("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (ticket.customer?.id) {
+      fetch(`/api/products?customerId=${ticket.customer.id}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            setAvailableProducts(data);
+          }
+        })
+        .catch((e) => console.error("Error fetching products:", e));
+    }
+  }, [ticket.customer?.id]);
+
+  const handleOpenEdit = (item: DTItem) => {
+    setEditingItem(item);
+    setEditQty(item.delQtyPcs);
+    setEditBatch(item.lotBatchNo || "");
+    const matchingProd = availableProducts.find(p => p.productCode === item.productCode);
+    setEditProductId(matchingProd?.id || "");
+    setEditError("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return;
+    setEditSubmitting(true);
+    setEditError("");
+    try {
+      const res = await fetch(`/api/delivery-tickets/${ticket.id}/items/${editingItem.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          productId: editProductId || null,
+          delQtyPcs: editQty,
+          lotBatchNo: editBatch || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update item.");
+      setEditingItem(null);
+      window.location.reload();
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
 
   const handleDeleteRequest = async () => {
     setDeleteSubmitting(true);
@@ -278,6 +341,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                     <th className="px-4 py-3 font-semibold text-right">Qty (L)</th>
                     <th className="px-4 py-3 font-semibold">Warehouse Location</th>
                     <th className="px-4 py-3 font-semibold">Status</th>
+                    {canWrite && <th className="px-4 py-3 font-semibold text-right">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -332,6 +396,24 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                           {STATUS_LABEL[item.status] || item.status}
                         </span>
                       </td>
+                      {canWrite && (
+                        <td className="px-4 py-4 text-right">
+                          {(() => {
+                            const totalPicked = item.pickingItems?.reduce((sum, pi) => sum + (pi.pickedQty ?? 0), 0) ?? 0;
+                            const hasNotBeenPicked = (item.deliveredQty ?? 0) === 0 && totalPicked === 0;
+
+                            return hasNotBeenPicked ? (
+                              <button
+                                onClick={() => handleOpenEdit(item)}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:text-primary/80 transition-colors bg-primary/5 hover:bg-primary/10 px-2.5 py-1.5 rounded-lg border border-primary/10"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                                Edit
+                              </button>
+                            ) : null;
+                          })()}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -490,6 +572,98 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
             )}
           </div>
         </div>
+      )}
+
+      {editingItem && (
+        <Dialog open={!!editingItem} onOpenChange={(open) => { if (!open) setEditingItem(null); }}>
+          <DialogContent className="sm:max-w-md bg-white rounded-3xl p-6">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <Edit className="w-5 h-5 text-primary" />
+                Edit Pick List Item
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Modify product details, quantity, or lot batch number. Warehouse locations will automatically re-allocate.
+              </DialogDescription>
+            </DialogHeader>
+
+            {editError && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {editError}
+              </div>
+            )}
+
+            <div className="space-y-4 my-2">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Product
+                </label>
+                <select
+                  value={editProductId}
+                  onChange={(e) => setEditProductId(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                >
+                  <option value="">Select a Product</option>
+                  {availableProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.productCode} - {p.productName} ({p.sizeLiter ? `${p.sizeLiter}L` : ""})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Quantity (pcs)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={editQty}
+                  onChange={(e) => setEditQty(parseInt(e.target.value, 10) || 0)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                  Lot / Batch No (optional)
+                </label>
+                <input
+                  type="text"
+                  value={editBatch}
+                  onChange={(e) => setEditBatch(e.target.value)}
+                  placeholder="e.g. 4154006"
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => setEditingItem(null)}
+                disabled={editSubmitting}
+                className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={editSubmitting || editQty <= 0 || !editProductId}
+                className="flex-1 py-2.5 bg-primary hover:bg-primary/95 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {editSubmitting ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+                ) : (
+                  <>Save Changes</>
+                )}
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

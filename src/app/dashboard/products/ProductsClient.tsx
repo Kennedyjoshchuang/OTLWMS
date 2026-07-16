@@ -192,7 +192,10 @@ export default function ProductsClient({
         res = await fetch(`/api/products/${editTarget!.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
+          body: JSON.stringify({
+            ...form,
+            confirmReactivate: showReactivateWarning,
+          }),
         });
       }
 

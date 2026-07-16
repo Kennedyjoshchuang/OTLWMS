@@ -15,7 +15,14 @@ export default async function DeliveryTicketDetailPage({
       createdBy: { select: { fullName: true } },
       items: {
         orderBy: { lineNo: "asc" },
-        include: { product: true },
+        include: {
+          product: true,
+          pickingItems: {
+            select: {
+              pickedQty: true,
+            },
+          },
+        },
       },
       deliveryOrders: {
         select: { id: true, doNumber: true, status: true },
