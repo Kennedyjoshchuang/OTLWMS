@@ -41,8 +41,8 @@ export async function GET(request: Request) {
       const startParam = searchParams.get("start");
       const endParam = searchParams.get("end");
       if (!startParam || !endParam) return NextResponse.json({ error: "Missing start or end date" }, { status: 400 });
-      tzStartDate = startOfDay(parseISO(startParam));
-      tzEndDate = endOfDay(parseISO(endParam));
+      tzStartDate = startOfDay(toZonedTime(new Date(startParam + "T00:00:00Z"), TIME_ZONE));
+      tzEndDate = endOfDay(toZonedTime(new Date(endParam + "T12:00:00Z"), TIME_ZONE));
     } else {
       return NextResponse.json({ error: "Invalid period" }, { status: 400 });
     }
@@ -50,13 +50,32 @@ export async function GET(request: Request) {
     const prismaStartDate = fromZonedTime(tzStartDate, TIME_ZONE);
     const prismaEndDate = fromZonedTime(tzEndDate, TIME_ZONE);
 
+    // Fetch active references to filter out orphaned movements
+    const [activeDOs, activeReceipts] = await Promise.all([
+      prisma.deliveryOrder.findMany({ select: { id: true } }),
+      prisma.inboundReceipt.findMany({ select: { id: true } })
+    ]);
+    const activeDOIds = new Set(activeDOs.map(d => d.id));
+    const activeReceiptIds = new Set(activeReceipts.map(r => r.id));
+
+    const isMovementValid = (m: any): boolean => {
+      if (!m.referenceType || !m.referenceId) return true;
+      if (m.referenceType === "delivery_order" || m.referenceType === "delivery_order_reversal") {
+        return activeDOIds.has(m.referenceId);
+      }
+      if (m.referenceType === "inbound_receipt") {
+        return activeReceiptIds.has(m.referenceId);
+      }
+      return true;
+    };
+
     // 1. Fetch Inbound (GRN) within period
     const inbounds = await prisma.inboundReceipt.findMany({
       where: { createdAt: { gte: prismaStartDate, lte: prismaEndDate } }
     });
 
     // Fetch Inbound Stock Movements within period
-    const inboundMovements = await prisma.stockMovement.findMany({
+    const inboundMovementsDb = await prisma.stockMovement.findMany({
       where: {
         movementType: "inbound",
         referenceType: "inbound_receipt",
@@ -66,6 +85,7 @@ export async function GET(request: Request) {
         product: true
       }
     });
+    const inboundMovements = inboundMovementsDb.filter(isMovementValid);
 
     // 2. Fetch Outbound (DO) within period based on creation or delivery
     const outbounds = await prisma.deliveryOrder.findMany({
@@ -92,10 +112,10 @@ export async function GET(request: Request) {
       return o.deliveredAt || o.shippedAt || o.deliveryDate || o.createdAt;
     };
 
-    // Delivered outbounds (only status "on_delivery" represents actual delivered orders)
+    // Outbound DOs (include both Picked/shipped/delivered statuses)
     const deliveredDOs = outbounds.filter(o => {
-      const isDeliveredStatus = o.status === "on_delivery";
-      if (!isDeliveredStatus) return false;
+      const isOutboundStatus = ["delivered", "on_delivery", "partially_delivered"].includes(o.status);
+      if (!isOutboundStatus) return false;
       const relevantDate = getDORelevantDate(o);
       return relevantDate >= prismaStartDate && relevantDate <= prismaEndDate;
     });
@@ -128,23 +148,33 @@ export async function GET(request: Request) {
       }
     });
 
-    const outboundMovementsAfter = await prisma.stockMovement.findMany({
+    // Filter out stock ledgers that belong to deleted inbound receipts
+    const validStockLedgersDb = stockLedgersDb.filter(sl => !sl.inboundReceiptId || activeReceiptIds.has(sl.inboundReceiptId));
+
+    const movementsAfterDb = await prisma.stockMovement.findMany({
       where: {
-        movementType: "outbound",
-        createdAt: { gt: prismaEndDate }
+        createdAt: { gt: prismaEndDate },
+        movementType: { in: ["inbound", "outbound", "adjustment"] }
       }
     });
+    const movementsAfter = movementsAfterDb.filter(isMovementValid);
 
-    const outboundMap = new Map<string, number>();
-    for (const m of outboundMovementsAfter) {
+    const movementMap = new Map<string, number>();
+    for (const m of movementsAfter) {
       const key = `${m.productId}-${m.palletPositionId || ""}-${m.batchNumber || ""}`;
-      outboundMap.set(key, (outboundMap.get(key) || 0) + m.quantity);
+      let delta = 0;
+      if (m.movementType === "inbound") {
+        delta = m.quantity;
+      } else if (m.movementType === "outbound" || m.movementType === "adjustment") {
+        delta = -m.quantity;
+      }
+      movementMap.set(key, (movementMap.get(key) || 0) + delta);
     }
 
-    const stockLedgers = stockLedgersDb.map(sl => {
+    const stockLedgers = validStockLedgersDb.map(sl => {
       const key = `${sl.productId}-${sl.palletPositionId}-${sl.batchNumber || ""}`;
-      const addedQty = outboundMap.get(key) || 0;
-      const reconstructedQty = sl.quantity + addedQty;
+      const netChangeAfter = movementMap.get(key) || 0;
+      const reconstructedQty = sl.quantity - netChangeAfter;
       const reconstructedQtyLiter = reconstructedQty * (sl.product?.sizeLiter || 0);
 
       return {
@@ -156,7 +186,7 @@ export async function GET(request: Request) {
 
     const totalWarehouseStock = stockLedgers.reduce((sum, sl) => sum + (sl.quantity * (sl.product?.sizeLiter || 0)), 0);
 
-    const calcOutboundLiter = (o: any) => o.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + (it.delQtyPcs * (it.product?.sizeLiter || 0)), 0) || 0;
+    const calcOutboundLiter = (o: any) => o.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + (it.deliveredQty * (it.product?.sizeLiter || 0)), 0) || 0;
 
     // Unique customers delivered to in this period
     const uniqueCustomers = new Set(deliveredDOs.map(o => o.customerId));
@@ -254,12 +284,12 @@ export async function GET(request: Request) {
             outboundProductMap.set(key, { productCode: p.productCode, productName: p.productName, pcs: 0, liter: 0 });
           }
           const current = outboundProductMap.get(key)!;
-          current.pcs += item.delQtyPcs;
-          current.liter += (item.delQtyPcs * (p.sizeLiter || 0));
+          current.pcs += item.deliveredQty;
+          current.liter += (item.deliveredQty * (p.sizeLiter || 0));
         }
       });
     });
-    const outboundProductDetails = Array.from(outboundProductMap.values()).sort((a, b) => b.liter - a.liter);
+    const outboundProductDetails = Array.from(outboundProductMap.values()).filter(item => item.pcs > 0).sort((a, b) => b.liter - a.liter);
 
     // Delivered Outbound Details (By Order)
     const outboundDetails = deliveredDOs.map(doItem => ({
@@ -268,7 +298,7 @@ export async function GET(request: Request) {
       customerName: doItem.customer.name,
       destination: doItem.deliveryTicket?.deliverToAddress || doItem.destination,
       deliveryDate: doItem.deliveryDate || doItem.createdAt,
-      totalPcs: doItem.deliveryTicket?.totalPcs || 0,
+      totalPcs: doItem.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + it.deliveredQty, 0) || 0,
       totalLiter: calcOutboundLiter(doItem)
     })).sort((a, b) => new Date(b.deliveryDate).getTime() - new Date(a.deliveryDate).getTime());
 
@@ -280,7 +310,7 @@ export async function GET(request: Request) {
       destination: doItem.deliveryTicket?.deliverToAddress || doItem.destination,
       status: doItem.status,
       createdAt: doItem.createdAt,
-      totalPcs: doItem.deliveryTicket?.totalPcs || 0,
+      totalPcs: doItem.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + it.deliveredQty, 0) || 0,
       totalLiter: calcOutboundLiter(doItem)
     })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
