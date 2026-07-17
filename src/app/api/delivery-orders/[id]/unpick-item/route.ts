@@ -74,7 +74,7 @@ export async function POST(
       // 4. Reset picking item status back to pending
       await tx.dOPickingItem.update({
         where: { id: item.id },
-        data: { pickedQty: 0, status: "pending" },
+        data: { pickedQty: 0, status: "pending", pickedById: null, pickedAt: null },
       });
 
       // 5. Reset DT item status back to pending

@@ -216,7 +216,7 @@ export async function POST(req: NextRequest) {
         const hasDigitsOrSymbols = /[\d-*:]{4,}/.test(potentialBatch);
         
         if (hasDigitsOrSymbols && !isPaintSize) {
-          lotBatchNo = afterTokens.pop() || "";
+          afterTokens.pop(); // Remove the batch token so it does not get joined into productName
         }
       }
 
@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
       rawItems.push({
         productCode,
         productName,
-        lotBatchNo,
+        lotBatchNo: "", // Explicitly set to empty/removed
         delQtyPcs
       });
     }

@@ -26,7 +26,7 @@ const SIMULATED_OCR = {
   deliverToName: "PT. RUPA RUPA WARNA",
   deliverToAddress: "KOMPLEK RUKO TANAH MAS, BATAM KOTA, BLOK C NO. 9 KEL. SUNGAI PANAS, INDONESIA",
   items: [
-    { productCode: "2HL001UVA", productName: "JOTAPLAST (ID) NEW WHITE 18L", lotBatchNo: "4154006-1-*-1:2", delQtyPcs: 30, delQtyLiter: 540, existsInDb: true },
+    { productCode: "2HL001UVA", productName: "JOTAPLAST (ID) NEW WHITE 18L", lotBatchNo: "", delQtyPcs: 30, delQtyLiter: 540, existsInDb: true },
   ],
 };
 
@@ -275,7 +275,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
     }
   };
 
-  const getLocationsForItem = (productCode: string, lotBatchNo: string) => {
+  const getLocationsForItem = (productCode: string) => {
     return locations.find(l => l.productCode === productCode)?.locations || [];
   };
 
@@ -582,7 +582,6 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                               <th className="py-1 pr-2">Loc</th>
                               <th className="py-1 pr-2">Part Number</th>
                               <th className="py-1 pr-2">Description</th>
-                              <th className="py-1 pr-2">Batch No</th>
                               <th className="py-1 text-center">Qty</th>
                             </tr>
                           </thead>
@@ -592,7 +591,6 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                                 <td className="py-1 pr-2">F6</td>
                                 <td className="py-1 pr-2 bg-yellow-200/50 font-mono text-[11px] break-all">{item.productCode}</td>
                                 <td className="py-1 pr-2 line-clamp-1">{item.productName}</td>
-                                <td className="py-1 pr-2 bg-yellow-200/50 font-mono text-[10px] break-all">{item.lotBatchNo}</td>
                                 <td className="py-1 text-center">{item.delQtyPcs}</td>
                               </tr>
                             ))}
@@ -716,7 +714,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
 
                         const renderItemCard = (item: any) => {
                           const idx = item.originalIndex;
-                          const locs = getLocationsForItem(item.productCode, item.lotBatchNo);
+                          const locs = getLocationsForItem(item.productCode);
                           return (
                             <div key={idx} className="p-3 bg-white hover:bg-slate-50 flex flex-col gap-2">
                               {/* If product does not exist in DB, show a warning badge */}
@@ -770,23 +768,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                                 </select>
                               </div>
 
-                              <div className="grid grid-cols-3 gap-3">
-                                <div>
-                                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Batch No</label>
-                                  <input
-                                    type="text"
-                                    value={item.lotBatchNo || ""}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      setFormData(prev => {
-                                        const newItems = [...prev.items];
-                                        newItems[idx] = { ...newItems[idx], lotBatchNo: val };
-                                        return { ...prev, items: newItems };
-                                      });
-                                    }}
-                                    className="w-full mt-1 border rounded-lg px-2 py-1 text-xs bg-white focus:ring-1 focus:ring-primary outline-none font-mono"
-                                  />
-                                </div>
+                              <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Qty (pcs)</label>
                                   <input

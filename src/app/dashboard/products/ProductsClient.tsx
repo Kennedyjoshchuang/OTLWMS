@@ -332,17 +332,14 @@ export default function ProductsClient({
               <th className="px-5 py-4 font-semibold">Product Name</th>
               <th className="px-5 py-4 font-semibold">Customer</th>
               <th className="px-5 py-4 font-semibold">Paint Type</th>
-              <th className="px-5 py-4 font-semibold">Color</th>
               <th className="px-5 py-4 font-semibold text-right">Size (L)</th>
-              <th className="px-5 py-4 font-semibold text-right">Weight (kg)</th>
-              <th className="px-5 py-4 font-semibold">Barcode</th>
               <th className="px-5 py-4 font-semibold text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-6 py-16 text-center text-slate-400">
+                <td colSpan={6} className="px-6 py-16 text-center text-slate-400">
                   <PackageSearch className="w-12 h-12 mx-auto mb-3 opacity-20" />
                   <p className="font-medium">Tidak ada produk ditemukan.</p>
                   <p className="text-xs mt-1 opacity-70">Coba ubah filter atau tambah produk baru.</p>
@@ -365,25 +362,8 @@ export default function ProductsClient({
                     </span>
                   </td>
                   <td className="px-5 py-3.5 text-slate-500 text-xs">{p.paintType || "—"}</td>
-                  <td className="px-5 py-3.5">
-                    {p.colorName ? (
-                      <span className="text-xs text-slate-600">{p.colorName}</span>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </td>
                   <td className="px-5 py-3.5 text-right font-mono text-xs">
                     {p.sizeLiter !== null ? `${p.sizeLiter} L` : "—"}
-                  </td>
-                  <td className="px-5 py-3.5 text-right font-mono text-xs">
-                    {p.weightKg !== null ? `${p.weightKg} kg` : "—"}
-                  </td>
-                  <td className="px-5 py-3.5">
-                    {p.barcode ? (
-                      <span className="font-mono text-[11px] text-slate-500">{p.barcode}</span>
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     <div className="flex items-center justify-end gap-2">

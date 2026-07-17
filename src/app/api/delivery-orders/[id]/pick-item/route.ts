@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const session = await getServerSession(authOptions);
+    if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = (session.user as any)?.id;
+
     const { id } = await params;
     const body = await req.json();
     const { pickingItemId } = body;
@@ -87,7 +93,7 @@ export async function POST(
       // 5. Update picking item
       await tx.dOPickingItem.update({
         where: { id: item.id },
-        data: { pickedQty: qtyPicked, status: "shipped" },
+        data: { pickedQty: qtyPicked, status: "shipped", pickedById: userId, pickedAt: new Date() },
       });
 
       await tx.deliveryTicketItem.update({

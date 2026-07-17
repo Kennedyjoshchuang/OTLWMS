@@ -20,7 +20,7 @@ export default async function DODetailPage({
       picker: true,
       driver: true,
       pickingItems: {
-        include: { product: true },
+        include: { product: true, pickedBy: true },
       },
     },
   });

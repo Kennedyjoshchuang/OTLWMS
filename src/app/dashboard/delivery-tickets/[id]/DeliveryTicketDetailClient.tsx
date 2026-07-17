@@ -141,7 +141,7 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
         body: JSON.stringify({
           productId: editProductId || null,
           delQtyPcs: editQty,
-          lotBatchNo: editBatch || null,
+          lotBatchNo: null,
         }),
       });
       const data = await res.json();
@@ -336,7 +336,6 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                     <th className="px-4 py-3 font-semibold">No</th>
                     <th className="px-4 py-3 font-semibold">Product Code</th>
                     <th className="px-4 py-3 font-semibold">Description</th>
-                    <th className="px-4 py-3 font-semibold">Batch No</th>
                     <th className="px-4 py-3 font-semibold text-right">Qty (pcs)</th>
                     <th className="px-4 py-3 font-semibold text-right">Qty (L)</th>
                     <th className="px-4 py-3 font-semibold">Warehouse Location</th>
@@ -355,9 +354,6 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                       </td>
                       <td className="px-4 py-4 text-slate-600 max-w-[200px]">
                         {item.productName || "-"}
-                      </td>
-                      <td className="px-4 py-4 text-slate-500 font-mono text-xs">
-                        {item.lotBatchNo || "-"}
                       </td>
                       <td className="px-4 py-4 text-right font-bold text-slate-800">
                         {item.delQtyPcs}
@@ -469,7 +465,6 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                     <tr>
                       <th className="border p-2 text-left">Product Code</th>
                       <th className="border p-2 text-left">Description</th>
-                      <th className="border p-2 text-left">Batch No</th>
                       <th className="border p-2 text-right">Qty (pcs)</th>
                       <th className="border p-2 text-right">Qty (L)</th>
                     </tr>
@@ -479,7 +474,6 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                       <tr key={item.id} className="even:bg-slate-50">
                         <td className="border p-2 font-mono font-semibold">{item.productCode}</td>
                         <td className="border p-2">{item.productName || "-"}</td>
-                        <td className="border p-2 font-mono text-xs">{item.lotBatchNo || "-"}</td>
                         <td className="border p-2 text-right font-bold">{item.delQtyPcs}</td>
                         <td className="border p-2 text-right text-slate-500">{item.delQtyLiter?.toLocaleString() || "-"} L</td>
                       </tr>
@@ -626,18 +620,6 @@ export default function DeliveryTicketDetailClient({ ticket }: { ticket: Ticket 
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                  Lot / Batch No (optional)
-                </label>
-                <input
-                  type="text"
-                  value={editBatch}
-                  onChange={(e) => setEditBatch(e.target.value)}
-                  placeholder="e.g. 4154006"
-                  className="w-full border rounded-xl px-3 py-2.5 text-sm bg-slate-50 focus:ring-2 focus:ring-primary focus:border-transparent outline-none font-mono"
-                />
-              </div>
             </div>
 
             <div className="flex gap-3 mt-4">

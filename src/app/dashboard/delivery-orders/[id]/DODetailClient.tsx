@@ -46,6 +46,7 @@ interface ShippedItem {
   pickedQty: number | null;
   status: string;
   product: { productCode: string; productName: string | null; unit: string | null };
+  pickedBy?: { fullName: string } | null;
 }
 
 interface Order {
@@ -107,6 +108,15 @@ export default function DODetailClient({ data }: { data: PageData }) {
   const progressPct = totalRequired > 0 ? Math.min(100, Math.round((totalPicked / totalRequired) * 100)) : 0;
   const isComplete = dtItems.every((i) => i.pickedQty >= i.delQtyPcs);
 
+  const getPickerDisplay = () => {
+    const pickedItems = shippedItems.filter((si) => si.pickedBy?.fullName);
+    if (pickedItems.length > 0) {
+      const names = Array.from(new Set(pickedItems.map((si) => si.pickedBy!.fullName)));
+      return names.join(", ");
+    }
+    return order.picker?.fullName || "-";
+  };
+
   /* ─── Handlers ─────────────────────────────────────────── */
   const handlePick = async (dtItem: DTItem, stock: AvailableStock) => {
     const key = `${dtItem.id}__${stock.stockLedgerId}`;
@@ -161,6 +171,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
           productName: dtItem.productName,
           unit: dtItem.product?.unit || null,
         },
+        pickedBy: data.newPickingItem.pickedBy,
       };
       setShippedItems((prev) => [...prev, newShipped]);
 
@@ -340,7 +351,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
       {/* ── Info Cards ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {[
-          { icon: <User className="w-4 h-4 text-indigo-600" />, bg: "bg-indigo-50", label: "Picker", value: order.currentUserName },
+          { icon: <User className="w-4 h-4 text-indigo-600" />, bg: "bg-indigo-50", label: "Picker", value: getPickerDisplay() },
           { icon: <Boxes className="w-4 h-4 text-emerald-600" />, bg: "bg-emerald-50", label: "Progress", value: `${totalPicked} / ${totalRequired} pcs picked` },
         ].map((c) => (
           <div key={c.label} className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm flex items-center gap-3">
@@ -409,9 +420,6 @@ export default function DODetailClient({ data }: { data: PageData }) {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-800 font-mono text-sm">{item.productCode}</span>
-                      {item.lotBatchNo && (
-                        <span className="text-xs text-slate-400 font-mono">Batch: {item.lotBatchNo}</span>
-                      )}
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">{item.productName || "—"}</p>
                   </div>
@@ -466,8 +474,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                     {stock.positionCode}
                                   </span>
                                   <div className="text-xs text-slate-500 mt-1">
-                                    <p className="font-mono">Batch: {stock.batchNumber || "—"}</p>
-                                    <p className="text-slate-400 mt-0.5">Inbound: {formatDate(stock.inboundDate)}</p>
+                                    <p className="text-slate-500">Inbound: {formatDate(stock.inboundDate)}</p>
                                   </div>
                                 </div>
                                 <div className="text-right">
@@ -538,7 +545,7 @@ export default function DODetailClient({ data }: { data: PageData }) {
                           <thead className="bg-slate-50 text-xs font-semibold text-slate-500 uppercase border-b border-slate-100">
                             <tr>
                               <th className="px-5 py-3 text-left">Lokasi Rack</th>
-                              <th className="px-5 py-3 text-left">Batch / Inbound Date</th>
+                              <th className="px-5 py-3 text-left">Inbound Date</th>
                               <th className="px-5 py-3 text-right">Stok Tersedia</th>
                               <th className="px-5 py-3 text-center">Qty Ambil</th>
                               <th className="px-5 py-3 text-right">Aksi</th>
@@ -562,10 +569,9 @@ export default function DODetailClient({ data }: { data: PageData }) {
                                     </span>
                                   </td>
 
-                                  {/* Batch + Date */}
+                                  {/* Inbound Date */}
                                   <td className="px-5 py-3">
-                                    <p className="text-xs font-mono text-slate-600">{stock.batchNumber || "—"}</p>
-                                    <p className="text-xs text-slate-400 mt-0.5">{formatDate(stock.inboundDate)}</p>
+                                    <p className="text-xs text-slate-700">{formatDate(stock.inboundDate)}</p>
                                   </td>
 
                                   {/* Available Qty */}
@@ -665,9 +671,6 @@ export default function DODetailClient({ data }: { data: PageData }) {
                           <MapPin className="w-3 h-3" />
                           {si.positionCode}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-500">
-                          Batch: {si.batchNumber || "—"}
-                        </span>
                       </div>
                     </div>
                     <div className="text-right">
@@ -705,7 +708,6 @@ export default function DODetailClient({ data }: { data: PageData }) {
                   <tr>
                     <th className="px-5 py-3 text-left">Produk</th>
                     <th className="px-5 py-3 text-left">Dari Lokasi</th>
-                    <th className="px-5 py-3 text-left">Batch</th>
                     <th className="px-5 py-3 text-right">Qty Picked</th>
                     <th className="px-5 py-3 text-right">Aksi</th>
                   </tr>
@@ -723,7 +725,6 @@ export default function DODetailClient({ data }: { data: PageData }) {
                           {si.positionCode}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-xs font-mono text-slate-500">{si.batchNumber || "—"}</td>
                       <td className="px-5 py-3 text-right font-black text-slate-800">
                         {si.pickedQty ?? si.requiredQty}
                         <span className="text-xs font-normal text-slate-400 ml-1">{si.product.unit || "pcs"}</span>

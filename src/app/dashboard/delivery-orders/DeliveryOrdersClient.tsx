@@ -7,6 +7,17 @@ import { useSession } from "next-auth/react";
 import { Search, Package, ArrowRight, Printer, Trash2, Clock, MessageSquare, AlertTriangle, AlertCircle, Loader2, CheckCircle2 } from "lucide-react";
 import { useEffect } from "react";
 
+const getPickerDisplay = (order: any) => {
+  const pickedItems = order.pickingItems?.filter(
+    (pi: any) => pi.status === "shipped" && pi.pickedBy?.fullName
+  );
+  if (pickedItems && pickedItems.length > 0) {
+    const names = Array.from(new Set(pickedItems.map((pi: any) => pi.pickedBy.fullName)));
+    return names.join(", ");
+  }
+  return order.picker?.fullName || "-";
+};
+
 export default function DeliveryOrdersClient({ initialOrders }: { initialOrders: any[] }) {
   const { data: session } = useSession();
   const canWrite = session?.user ? hasWriteAccess(session.user as any, "/dashboard/delivery-orders") : false;
@@ -109,7 +120,7 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
               </div>
               <div>
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Picker</p>
-                <p className="text-sm font-medium text-slate-700">{order.picker?.fullName || "-"}</p>
+                 <p className="text-sm font-medium text-slate-700">{getPickerDisplay(order)}</p>
               </div>
             </div>
             
@@ -181,7 +192,7 @@ export default function DeliveryOrdersClient({ initialOrders }: { initialOrders:
                   <td className="px-6 py-4 font-medium text-slate-800">{order.doNumber.replace('OTL-DO-', 'OTL-PL-')}</td>
                   <td className="px-6 py-4">{order.deliveryTicket?.deliverToName || order.customer.name}</td>
                   <td className="px-6 py-4 max-w-[200px] truncate">{order.destination}</td>
-                  <td className="px-6 py-4">{order.picker?.fullName || "-"}</td>
+                   <td className="px-6 py-4">{getPickerDisplay(order)}</td>
                   <td className="px-6 py-4">{order.pickingItems.length} items</td>
                   <td className="px-6 py-4 min-w-[160px]">
                     {(() => {

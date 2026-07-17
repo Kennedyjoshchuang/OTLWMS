@@ -185,9 +185,6 @@ export default function OmegaDTPrintView({
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">
                   Description
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">
-                  Batch No
-                </th>
                 <th className="px-3 py-3 text-right text-xs font-bold uppercase tracking-wider w-16">
                   Qty (pcs)
                 </th>
@@ -214,9 +211,6 @@ export default function OmegaDTPrintView({
                   </td>
                   <td className="px-3 py-3 text-slate-700 text-xs leading-relaxed">
                     {item.productName || "-"}
-                  </td>
-                  <td className="px-3 py-3 font-mono text-xs text-slate-500">
-                    {item.lotBatchNo || "-"}
                   </td>
                   <td className="px-3 py-3 text-right font-black text-slate-900">
                     {item.delQtyPcs}
@@ -249,7 +243,7 @@ export default function OmegaDTPrintView({
             </tbody>
             <tfoot>
               <tr className="bg-slate-800 text-white font-bold">
-                <td colSpan={4} className="px-3 py-3 text-right text-xs uppercase tracking-wider">
+                <td colSpan={3} className="px-3 py-3 text-right text-xs uppercase tracking-wider">
                   TOTAL
                 </td>
                 <td className="px-3 py-3 text-right font-black">{totalPcs}</td>

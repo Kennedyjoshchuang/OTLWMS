@@ -174,7 +174,6 @@ export default function OmegaDTPrintPageClient({ ticket }: { ticket: Ticket }) {
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider w-8">No</th>
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">Product Code</th>
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">Description</th>
-                <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">Batch No</th>
                 <th className="px-3 py-3 text-right text-xs font-bold uppercase tracking-wider w-16">Qty (pcs)</th>
                 <th className="px-3 py-3 text-right text-xs font-bold uppercase tracking-wider w-16">Qty (L)</th>
                 <th className="px-3 py-3 text-left text-xs font-bold uppercase tracking-wider">Warehouse Location</th>
@@ -195,9 +194,6 @@ export default function OmegaDTPrintPageClient({ ticket }: { ticket: Ticket }) {
                   </td>
                   <td className="px-3 py-3 text-slate-700 text-xs leading-relaxed">
                     {item.productName || "-"}
-                  </td>
-                  <td className="px-3 py-3 font-mono text-xs text-slate-500">
-                    {item.lotBatchNo || "-"}
                   </td>
                   <td className="px-3 py-3 text-right font-black text-slate-900">{item.delQtyPcs}</td>
                   <td className="px-3 py-3 text-right text-slate-600 text-xs">
@@ -228,7 +224,7 @@ export default function OmegaDTPrintPageClient({ ticket }: { ticket: Ticket }) {
             </tbody>
             <tfoot>
               <tr className="bg-slate-800 text-white font-bold">
-                <td colSpan={4} className="px-3 py-3 text-right text-xs uppercase tracking-wider">
+                <td colSpan={3} className="px-3 py-3 text-right text-xs uppercase tracking-wider">
                   TOTAL
                 </td>
                 <td className="px-3 py-3 text-right font-black">{totalPcs}</td>

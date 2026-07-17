@@ -9,7 +9,9 @@ export default async function DeliveryOrdersPage() {
       customer: true,
       picker: true,
       driver: true,
-      pickingItems: true,
+      pickingItems: {
+        include: { pickedBy: true },
+      },
       deliveryTicket: {
         include: { items: true },
       },
