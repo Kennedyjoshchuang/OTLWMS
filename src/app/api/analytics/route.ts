@@ -106,9 +106,6 @@ export async function GET(request: Request) {
     });
 
     const getDORelevantDate = (o: any): Date => {
-      if (o.status === "on_delivery") {
-        return o.shippedAt || o.deliveryDate || o.createdAt;
-      }
       return o.deliveredAt || o.shippedAt || o.deliveryDate || o.createdAt;
     };
 
@@ -159,6 +156,15 @@ export async function GET(request: Request) {
     });
     const movementsAfter = movementsAfterDb.filter(isMovementValid);
 
+    // Group current stock ledgers by product, position, and batch
+    const ledgerGroups = new Map<string, typeof validStockLedgersDb>();
+    for (const sl of validStockLedgersDb) {
+      const key = `${sl.productId}-${sl.palletPositionId || ""}-${sl.batchNumber || ""}`;
+      const group = ledgerGroups.get(key) || [];
+      group.push(sl);
+      ledgerGroups.set(key, group);
+    }
+
     const movementMap = new Map<string, number>();
     for (const m of movementsAfter) {
       const key = `${m.productId}-${m.palletPositionId || ""}-${m.batchNumber || ""}`;
@@ -171,18 +177,32 @@ export async function GET(request: Request) {
       movementMap.set(key, (movementMap.get(key) || 0) + delta);
     }
 
-    const stockLedgers = validStockLedgersDb.map(sl => {
-      const key = `${sl.productId}-${sl.palletPositionId}-${sl.batchNumber || ""}`;
+    const stockLedgers: typeof validStockLedgersDb = [];
+    for (const [key, group] of ledgerGroups.entries()) {
+      const totalCurrentQty = group.reduce((sum, sl) => sum + sl.quantity, 0);
       const netChangeAfter = movementMap.get(key) || 0;
-      const reconstructedQty = sl.quantity - netChangeAfter;
-      const reconstructedQtyLiter = reconstructedQty * (sl.product?.sizeLiter || 0);
+      const reconstructedQty = totalCurrentQty - netChangeAfter;
 
-      return {
-        ...sl,
-        quantity: reconstructedQty,
-        quantityLiter: reconstructedQtyLiter
-      };
-    }).filter(sl => sl.quantity > 0);
+      if (reconstructedQty > 0) {
+        const delta = reconstructedQty - totalCurrentQty;
+        
+        // Add first ledger with the delta
+        stockLedgers.push({
+          ...group[0],
+          quantity: group[0].quantity + delta,
+          quantityLiter: (group[0].quantity + delta) * (group[0].product?.sizeLiter || 0)
+        });
+
+        // Add remaining ledgers in the group unchanged
+        for (let i = 1; i < group.length; i++) {
+          stockLedgers.push({
+            ...group[i],
+            quantity: group[i].quantity,
+            quantityLiter: group[i].quantity * (group[i].product?.sizeLiter || 0)
+          });
+        }
+      }
+    }
 
     const totalWarehouseStock = stockLedgers.reduce((sum, sl) => sum + (sl.quantity * (sl.product?.sizeLiter || 0)), 0);
 
