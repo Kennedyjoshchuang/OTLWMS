@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { roundFloat } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
 
     // Calculate quantities
     const totalPcs = dt.totalPcs || dt.items.reduce((sum, item) => sum + (item.delQtyPcs || 0), 0) || 0;
-    const totalLiter = dt.totalLiter || dt.items.reduce((sum, item) => sum + (item.delQtyLiter || 0), 0) || 0;
+    const totalLiter = roundFloat(dt.totalLiter || dt.items.reduce((sum, item) => sum + (item.delQtyLiter || 0), 0) || 0, 2);
     const totalPallets = dt.totalPallets || Math.max(1, Math.ceil(totalPcs / 100)); // Default 1 pallet per 100 pcs if not specified
     const doCount = dt.deliveryOrders.length || 1;
 
@@ -68,41 +69,41 @@ export async function POST(req: NextRequest) {
         description: `Handling out service fee for ${totalLiter.toLocaleString()} liters of product`,
         quantity: totalLiter,
         unitPrice: RATES.handlingOut,
-        totalPrice: totalLiter * RATES.handlingOut,
+        totalPrice: roundFloat(totalLiter * RATES.handlingOut, 2),
       },
       {
         activityName: "Picking Fee",
         description: `Warehouse picking fee for ${totalPcs.toLocaleString()} pcs of items`,
         quantity: totalPcs,
         unitPrice: RATES.picking,
-        totalPrice: totalPcs * RATES.picking,
+        totalPrice: roundFloat(totalPcs * RATES.picking, 2),
       },
       {
         activityName: "Storage Fee",
         description: `Pallet storage fee for ${totalPallets} pallet(s)`,
         quantity: totalPallets,
         unitPrice: RATES.storage,
-        totalPrice: totalPallets * RATES.storage,
+        totalPrice: roundFloat(totalPallets * RATES.storage, 2),
       },
       {
         activityName: "Delivery Fee",
         description: `Transportation fee for ${doCount} delivery shipment(s) via ${dt.vehicleNo || dt.haulierCompany || "Sinaga Transport"}`,
         quantity: doCount,
         unitPrice: RATES.delivery,
-        totalPrice: doCount * RATES.delivery,
+        totalPrice: roundFloat(doCount * RATES.delivery, 2),
       },
       {
         activityName: "Administration Fee",
         description: "Standard document administration processing fee",
         quantity: 1,
         unitPrice: RATES.admin,
-        totalPrice: 1 * RATES.admin,
+        totalPrice: roundFloat(1 * RATES.admin, 2),
       },
     ];
 
     // Filter out items with 0 price (just in case)
     const activeItems = invoiceItemsData.filter((item) => item.totalPrice > 0);
-    const totalAmount = activeItems.reduce((sum, item) => sum + item.totalPrice, 0);
+    const totalAmount = roundFloat(activeItems.reduce((sum, item) => sum + item.totalPrice, 0), 2);
 
     const invoice = await prisma.$transaction(async (tx) => {
       // Generate Invoice Number

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { roundFloat } from "@/lib/utils";
 
 export async function POST(
   req: NextRequest,
@@ -45,7 +46,7 @@ export async function POST(
         const newQty = Math.max(0, stock.quantity - qtyPicked);
         const newReservedQty = Math.max(0, stock.reservedQty - qtyPicked);
         const sizeLiter = stock.product?.sizeLiter || 0;
-        const newQtyLiter = newQty * sizeLiter;
+        const newQtyLiter = roundFloat(newQty * sizeLiter, 2);
 
         // Update StockLedger
         await tx.stockLedger.update({

@@ -28,6 +28,12 @@ export function formatNumber(n: number | null | undefined) {
   return n.toLocaleString('id-ID')
 }
 
+export function roundFloat(val: number | null | undefined, decimals: number = 2): number {
+  if (val == null || isNaN(val)) return 0
+  const factor = Math.pow(10, decimals)
+  return Math.round((val + Number.EPSILON) * factor) / factor
+}
+
 export function generateGRN(seq: number) {
   const year = new Date().getFullYear()
   return `GRN-${year}-${String(seq).padStart(4, '0')}`

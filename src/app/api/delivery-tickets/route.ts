@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { roundFloat } from "@/lib/utils";
 
 // POST /api/delivery-tickets — create a new DT from OCR data
 export async function POST(req: NextRequest) {
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
             productName: item.productName || null,
             lotBatchNo: item.lotBatchNo || null,
             delQtyPcs: item.delQtyPcs || 0,
-            delQtyLiter: item.delQtyLiter ? Number(item.delQtyLiter) : null,
+            delQtyLiter: item.delQtyLiter ? roundFloat(Number(item.delQtyLiter), 2) : null,
             status: "pending",
           })),
         },

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { roundFloat } from "@/lib/utils";
 
 export async function PATCH(
   req: NextRequest,
@@ -61,8 +62,8 @@ export async function PATCH(
       }
 
       // Recalculate sizeLiter and weightKg
-      const delQtyLiter = product.sizeLiter ? delQtyPcs * product.sizeLiter : null;
-      const delQtyKg = product.weightKg ? delQtyPcs * product.weightKg : null;
+      const delQtyLiter = product.sizeLiter ? roundFloat(delQtyPcs * product.sizeLiter, 2) : null;
+      const delQtyKg = product.weightKg ? roundFloat(delQtyPcs * product.weightKg, 2) : null;
 
       // Check if there are active pickingItems (which must have pickedQty = 0)
       if (dtItem.pickingItems.length > 0) {
@@ -108,14 +109,14 @@ export async function PATCH(
         where: { deliveryTicketId: ticketId }
       });
       const totalPcs = allItems.reduce((sum, i) => sum + i.delQtyPcs, 0);
-      const totalLiter = allItems.reduce((sum, i) => sum + (i.delQtyLiter ?? 0), 0);
+      const totalLiter = roundFloat(allItems.reduce((sum, i) => sum + (i.delQtyLiter ?? 0), 0), 2);
       
       await tx.deliveryTicket.update({
         where: { id: ticketId },
         data: {
           totalPcs,
           totalLiter,
-          totalGrossKg: totalLiter * 1.3, // follow existing business logic
+          totalGrossKg: roundFloat(totalLiter * 1.3, 2), // follow existing business logic
         }
       });
 

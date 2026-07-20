@@ -9,7 +9,7 @@ import {
   format, isSameHour, isSameDay, isSameMonth, differenceInDays, parseISO
 } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
-import { getDisplayRowNumber } from "@/lib/utils";
+import { getDisplayRowNumber, roundFloat } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -204,9 +204,9 @@ export async function GET(request: Request) {
       }
     }
 
-    const totalWarehouseStock = stockLedgers.reduce((sum, sl) => sum + (sl.quantity * (sl.product?.sizeLiter || 0)), 0);
+    const totalWarehouseStock = roundFloat(stockLedgers.reduce((sum, sl) => sum + (sl.quantity * (sl.product?.sizeLiter || 0)), 0), 2);
 
-    const calcOutboundLiter = (o: any) => o.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + (it.deliveredQty * (it.product?.sizeLiter || 0)), 0) || 0;
+    const calcOutboundLiter = (o: any) => roundFloat(o.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + (it.deliveredQty * (it.product?.sizeLiter || 0)), 0) || 0, 2);
 
     // Unique customers delivered to in this period
     const uniqueCustomers = new Set(deliveredDOs.map(o => o.customerId));
@@ -254,14 +254,14 @@ export async function GET(request: Request) {
       let outboundLiters = 0;
 
       if (period === "daily") {
-        inboundLiters = inboundMovements.filter(m => isSameHour(toZonedTime(new Date(m.createdAt), TIME_ZONE), intervalDate)).reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0);
-        outboundLiters = deliveredDOs.filter(o => isSameHour(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+        inboundLiters = roundFloat(inboundMovements.filter(m => isSameHour(toZonedTime(new Date(m.createdAt), TIME_ZONE), intervalDate)).reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0), 2);
+        outboundLiters = roundFloat(deliveredDOs.filter(o => isSameHour(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0), 2);
       } else if (period === "weekly" || period === "monthly" || (period === "custom" && customGroupMode === "day")) {
-        inboundLiters = inboundMovements.filter(m => isSameDay(toZonedTime(new Date(m.createdAt), TIME_ZONE), intervalDate)).reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0);
-        outboundLiters = deliveredDOs.filter(o => isSameDay(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+        inboundLiters = roundFloat(inboundMovements.filter(m => isSameDay(toZonedTime(new Date(m.createdAt), TIME_ZONE), intervalDate)).reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0), 2);
+        outboundLiters = roundFloat(deliveredDOs.filter(o => isSameDay(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0), 2);
       } else if (period === "yearly" || (period === "custom" && customGroupMode === "month")) {
-        inboundLiters = inboundMovements.filter(m => isSameMonth(toZonedTime(new Date(m.createdAt), TIME_ZONE), intervalDate)).reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0);
-        outboundLiters = deliveredDOs.filter(o => isSameMonth(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+        inboundLiters = roundFloat(inboundMovements.filter(m => isSameMonth(toZonedTime(new Date(m.createdAt), TIME_ZONE), intervalDate)).reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0), 2);
+        outboundLiters = roundFloat(deliveredDOs.filter(o => isSameMonth(toZonedTime(getDORelevantDate(o), TIME_ZONE), intervalDate)).reduce((sum, o) => sum + calcOutboundLiter(o), 0), 2);
       }
 
       return {
@@ -272,8 +272,8 @@ export async function GET(request: Request) {
     });
 
     // Summary Totals
-    const totalInboundLiters = inboundMovements.reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0);
-    const totalOutboundLiters = deliveredDOs.reduce((sum, o) => sum + calcOutboundLiter(o), 0);
+    const totalInboundLiters = roundFloat(inboundMovements.reduce((sum, m) => sum + (m.quantity * (m.product?.sizeLiter || 0)), 0), 2);
+    const totalOutboundLiters = roundFloat(deliveredDOs.reduce((sum, o) => sum + calcOutboundLiter(o), 0), 2);
 
     // --- Detailed Reporting ---
 
@@ -288,10 +288,10 @@ export async function GET(request: Request) {
         }
         const current = inboundProductMap.get(key)!;
         current.pcs += m.quantity;
-        current.liter += (m.quantity * (p.sizeLiter || 0));
+        current.liter = roundFloat(current.liter + (m.quantity * (p.sizeLiter || 0)), 2);
       }
     });
-    const inboundDetails = Array.from(inboundProductMap.values()).sort((a, b) => b.liter - a.liter);
+    const inboundDetails = Array.from(inboundProductMap.values()).map(item => ({ ...item, liter: roundFloat(item.liter, 2) })).sort((a, b) => b.liter - a.liter);
 
     // Outbound product details (grouped by product)
     const outboundProductMap = new Map<string, { productCode: string, productName: string, pcs: number, liter: number }>();
@@ -305,11 +305,11 @@ export async function GET(request: Request) {
           }
           const current = outboundProductMap.get(key)!;
           current.pcs += item.deliveredQty;
-          current.liter += (item.deliveredQty * (p.sizeLiter || 0));
+          current.liter = roundFloat(current.liter + (item.deliveredQty * (p.sizeLiter || 0)), 2);
         }
       });
     });
-    const outboundProductDetails = Array.from(outboundProductMap.values()).filter(item => item.pcs > 0).sort((a, b) => b.liter - a.liter);
+    const outboundProductDetails = Array.from(outboundProductMap.values()).filter(item => item.pcs > 0).map(item => ({ ...item, liter: roundFloat(item.liter, 2) })).sort((a, b) => b.liter - a.liter);
 
     // Delivered Outbound Details (By Order)
     const outboundDetails = deliveredDOs.map(doItem => ({
@@ -354,9 +354,9 @@ export async function GET(request: Request) {
       }
       const current = stockMap.get(key)!;
       current.pcs += sl.quantity;
-      current.liter += (sl.quantity * (p.sizeLiter || 0));
+      current.liter = roundFloat(current.liter + (sl.quantity * (p.sizeLiter || 0)), 2);
     });
-    const stockDetails = Array.from(stockMap.values()).sort((a, b) => b.liter - a.liter);
+    const stockDetails = Array.from(stockMap.values()).map(item => ({ ...item, liter: roundFloat(item.liter, 2) })).sort((a, b) => b.liter - a.liter);
 
     return NextResponse.json({
       success: true,

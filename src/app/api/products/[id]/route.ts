@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { roundFloat } from "@/lib/utils";
 
 // PATCH /api/products/[id] — update product fields
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -71,8 +72,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
               paintType: paintType?.trim() || null,
               colorName: colorName?.trim() || null,
               colorCode: colorCode?.trim() || null,
-              sizeLiter: sizeLiter !== undefined && sizeLiter !== "" ? Number(sizeLiter) : null,
-              weightKg: weightKg !== undefined && weightKg !== "" ? Number(weightKg) : null,
+              sizeLiter: sizeLiter !== undefined && sizeLiter !== "" && sizeLiter !== null ? roundFloat(Number(sizeLiter), 2) : null,
+              weightKg: weightKg !== undefined && weightKg !== "" && weightKg !== null ? roundFloat(Number(weightKg), 2) : null,
               barcode: barcode?.trim() || null,
               unit: unit?.trim() || "pcs",
               isActive: true, // Reactivate
@@ -159,8 +160,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           paintType: paintType?.trim() || null,
           colorName: colorName?.trim() || null,
           colorCode: colorCode?.trim() || null,
-          sizeLiter: sizeLiter !== undefined && sizeLiter !== "" ? Number(sizeLiter) : null,
-          weightKg: weightKg !== undefined && weightKg !== "" ? Number(weightKg) : null,
+          sizeLiter: sizeLiter !== undefined && sizeLiter !== "" && sizeLiter !== null ? roundFloat(Number(sizeLiter), 2) : null,
+          weightKg: weightKg !== undefined && weightKg !== "" && weightKg !== null ? roundFloat(Number(weightKg), 2) : null,
           barcode: barcode?.trim() || null,
           unit: unit?.trim() || "pcs",
           isActive: isActive !== undefined ? Boolean(isActive) : undefined,

@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import CreatableSelect from "react-select/creatable";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess } from "@/lib/utils";
+import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess, roundFloat } from "@/lib/utils";
 import { useSession } from "next-auth/react";
 import {
   Search, Eye, ArrowRight, Loader2, FileUp, FileText,
@@ -600,7 +600,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                       <div className="flex justify-end mt-4">
                         <div className="w-64">
                           <div className="flex justify-between"><span className="font-semibold">Total Quantity:</span> <span>{formData.items.reduce((acc, curr) => acc + curr.delQtyPcs, 0)}</span></div>
-                          <div className="flex justify-between"><span className="font-semibold">Total Gross Weight:</span> <span>{(formData.items.reduce((acc, curr) => acc + (curr.delQtyLiter || 0), 0) * 1.3).toFixed(1)}</span></div>
+                          <div className="flex justify-between"><span className="font-semibold">Total Gross Weight:</span> <span>{(formData.items.reduce((acc, curr) => acc + (curr.delQtyLiter || 0), 0) * 1.3).toFixed(2)}</span></div>
                         </div>
                       </div>
                     </div>
@@ -746,7 +746,7 @@ export default function DeliveryTicketsClient({ initialTickets, customers = [] }
                                           ...newItems[idx],
                                           productCode: p.productCode,
                                           productName: p.productName,
-                                          delQtyLiter: newItems[idx].delQtyPcs * (p.sizeLiter || 0),
+                                          delQtyLiter: roundFloat(newItems[idx].delQtyPcs * (p.sizeLiter || 0), 2),
                                           existsInDb: true
                                         };
                                         return { ...prev, items: newItems };

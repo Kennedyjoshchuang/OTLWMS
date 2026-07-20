@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { generateGRN } from "@/lib/utils";
+import { generateGRN, roundFloat } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -47,10 +47,13 @@ export async function POST(req: NextRequest) {
         (sum: number, item: any) => sum + (Number(item.qty) || 0),
         0
       );
-      const totalLiterReceived = items.reduce(
-        (sum: number, item: any) =>
-          sum + (Number(item.qty) || 0) * (Number(item.sizeLiter) || 0),
-        0
+      const totalLiterReceived = roundFloat(
+        items.reduce(
+          (sum: number, item: any) =>
+            sum + (Number(item.qty) || 0) * (Number(item.sizeLiter) || 0),
+          0
+        ),
+        2
       );
 
       // Create the InboundReceipt
@@ -123,7 +126,7 @@ export async function POST(req: NextRequest) {
             palletPositionId: availablePosition.id,
             batchNumber: item.batchNumber || null,
             quantity: Number(item.qty),
-            quantityLiter: Number(item.qty) * Number(item.sizeLiter),
+            quantityLiter: roundFloat(Number(item.qty) * Number(item.sizeLiter), 2),
             inboundDate: newReceipt.receivedDate,
             inboundReceiptId: newReceipt.id,
           }

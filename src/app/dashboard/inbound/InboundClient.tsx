@@ -5,7 +5,7 @@ import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess, getDisplayRowNumber } from "@/lib/utils";
+import { formatDateTime, STATUS_COLOR, STATUS_LABEL, hasWriteAccess, getDisplayRowNumber, roundFloat } from "@/lib/utils";
 import {
   Search, Inbox, Plus, X, Trash2,
   PackagePlus, Loader2, CheckCircle2, AlertCircle, AlertTriangle,
@@ -313,9 +313,12 @@ export default function InboundClient({
   };
 
   const totalPcs = items.reduce((s, it) => s + Number(it.qty || 0), 0);
-  const totalLiter = items.reduce(
-    (s, it) => s + Number(it.qty || 0) * Number(it.sizeLiter || 0),
-    0
+  const totalLiter = roundFloat(
+    items.reduce(
+      (s, it) => s + Number(it.qty || 0) * Number(it.sizeLiter || 0),
+      0
+    ),
+    2
   );
 
   // ─────────────────────────────────────────────────────────────────────────

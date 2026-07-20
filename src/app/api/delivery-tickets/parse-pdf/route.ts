@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { roundFloat } from "@/lib/utils";
 import { PDFParse } from "pdf-parse";
 import path from "path";
 import { pathToFileURL } from "url";
@@ -279,13 +280,13 @@ export async function POST(req: NextRequest) {
         
         let calculatedLiter = 0;
         if (sizeLiter) {
-          calculatedLiter = item.delQtyPcs * sizeLiter;
+          calculatedLiter = roundFloat(item.delQtyPcs * sizeLiter, 2);
         } else {
           // Fallback to parse size from name
           const sizeMatch = name.match(/(\d+(?:\.\d+)?)\s*L(?:iter)?\b/i);
           if (sizeMatch) {
             const parsedSize = parseFloat(sizeMatch[1]);
-            calculatedLiter = item.delQtyPcs * parsedSize;
+            calculatedLiter = roundFloat(item.delQtyPcs * parsedSize, 2);
           }
         }
 

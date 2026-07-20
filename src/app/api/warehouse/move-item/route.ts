@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { hasWriteAccess } from "@/lib/utils";
+import { hasWriteAccess, roundFloat } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
   try {
@@ -223,7 +223,7 @@ export async function POST(req: NextRequest) {
             where: { id: stockLedgerId },
             data: {
               quantity: remainingQty,
-              quantityLiter: remainingQty * sizeLiter,
+              quantityLiter: roundFloat(remainingQty * sizeLiter, 2),
             },
           });
 
@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
               palletPositionId: targetPositionId,
               batchNumber: sourceLedger.batchNumber,
               quantity: qtyToMove,
-              quantityLiter: qtyToMove * sizeLiter,
+              quantityLiter: roundFloat(qtyToMove * sizeLiter, 2),
               inboundDate: sourceLedger.inboundDate,
               inboundReceiptId: sourceLedger.inboundReceiptId,
               isReserved: false,
