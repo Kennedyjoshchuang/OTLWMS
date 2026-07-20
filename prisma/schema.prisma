@@ -277,6 +277,7 @@ model DeliveryOrder {
   deliveryDate     DateTime?
   driverId         String?
   vehicleNo        String?
+  helperName       String?
   status           String   @default("draft")  // draft | picking | ready_to_ship | on_delivery | partially_delivered | delivered | cancelled
   pickerId         String?
   pickingStartedAt DateTime?

@@ -36,9 +36,10 @@ interface AnalyticsData {
   details: {
     inbound: Array<{ productCode: string; productName: string; pcs: number; liter: number }>;
     outboundProducts: Array<{ productCode: string; productName: string; pcs: number; liter: number }>;
-    outbound: Array<{ id: string; doNumber: string; customerName: string; destination: string; deliveryDate: string; totalPcs: number; totalLiter: number }>;
-    pending: Array<{ id: string; doNumber: string; customerName: string; destination: string; status: string; createdAt: string; totalPcs: number; totalLiter: number }>;
+    outbound: Array<{ id: string; doNumber: string; customerName: string; destination: string; deliveryDate: string; totalPcs: number; totalLiter: number; vehicleNo?: string; driverName?: string; helperName?: string }>;
+    pending: Array<{ id: string; doNumber: string; customerName: string; destination: string; status: string; createdAt: string; totalPcs: number; totalLiter: number; vehicleNo?: string; driverName?: string; helperName?: string }>;
     stock: Array<{ productCode: string; productName: string; location: string; pcs: number; liter: number }>;
+    employeeDeliveries: Array<{ employeeName: string; driverDestinationsCount: number; helperDestinationsCount: number; totalDestinationsCount: number }>;
   };
 }
 
@@ -58,7 +59,8 @@ export default function AnalyticsClient() {
     outboundProducts: true,
     stock: true,
     delivered: true,
-    pending: true
+    pending: true,
+    employeeDeliveries: true
   });
 
   const handleExcelExport = async () => {
@@ -112,7 +114,10 @@ export default function AnalyticsClient() {
           [t('table.col.destination')]: item.destination,
           [t('table.col.date')]: new Date(item.deliveryDate).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US'),
           [t('table.col.total_pcs')]: item.totalPcs,
-          [t('table.col.volume')]: item.totalLiter
+          [t('table.col.volume')]: item.totalLiter,
+          [t('table.col.vehicle_no')]: item.vehicleNo || "-",
+          [t('table.col.driver')]: item.driverName || "-",
+          [t('table.col.helper')]: item.helperName || "-"
         }));
         const ws = XLSX.utils.json_to_sheet(deliveredRows);
         XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.delivered').substring(0, 31));
@@ -127,10 +132,25 @@ export default function AnalyticsClient() {
           [t('table.col.status')]: item.status.replace(/_/g, ' '),
           [t('table.col.created')]: new Date(item.createdAt).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US'),
           [t('table.col.total_pcs')]: item.totalPcs,
-          [t('table.col.volume')]: item.totalLiter
+          [t('table.col.volume')]: item.totalLiter,
+          [t('table.col.vehicle_no')]: item.vehicleNo || "-",
+          [t('table.col.driver')]: item.driverName || "-",
+          [t('table.col.helper')]: item.helperName || "-"
         }));
         const ws = XLSX.utils.json_to_sheet(pendingRows);
         XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.pending').substring(0, 31));
+        hasData = true;
+      }
+
+      if (exportSections.employeeDeliveries && data.details.employeeDeliveries) {
+        const empRows = data.details.employeeDeliveries.map(item => ({
+          [t('table.col.employee_name')]: item.employeeName,
+          [t('table.col.driver_destinations')]: item.driverDestinationsCount,
+          [t('table.col.helper_destinations')]: item.helperDestinationsCount,
+          [t('table.col.total_destinations')]: item.totalDestinationsCount,
+        }));
+        const ws = XLSX.utils.json_to_sheet(empRows);
+        XLSX.utils.book_append_sheet(wb, ws, t('analytics.sections.employee_deliveries').substring(0, 31));
         hasData = true;
       }
 
@@ -413,11 +433,14 @@ export default function AnalyticsClient() {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.date')}</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.total_pcs')}</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.volume')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.vehicle_no')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.driver')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.helper')}</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-zinc-900 divide-y divide-slate-200 dark:divide-zinc-800">
                       {data.details.outbound.length === 0 ? (
-                        <tr><td colSpan={6} className="px-4 py-4 text-center text-sm text-slate-500 dark:text-zinc-400">{t('table.empty.delivered')}</td></tr>
+                        <tr><td colSpan={9} className="px-4 py-4 text-center text-sm text-slate-500 dark:text-zinc-400">{t('table.empty.delivered')}</td></tr>
                       ) : data.details.outbound.map((item) => (
                         <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors">
                           <td className="px-4 py-3 text-sm text-slate-800 dark:text-zinc-200 font-medium">{item.doNumber}</td>
@@ -426,6 +449,9 @@ export default function AnalyticsClient() {
                           <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300">{new Date(item.deliveryDate).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US')}</td>
                           <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 text-right">{item.totalPcs}</td>
                           <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 text-right">{item.totalLiter.toFixed(1)}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 font-medium">{item.vehicleNo || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300">{item.driverName || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300">{item.helperName || "-"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -447,11 +473,14 @@ export default function AnalyticsClient() {
                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.created')}</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.total_pcs')}</th>
                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.volume')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.vehicle_no')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.driver')}</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.helper')}</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-zinc-900 divide-y divide-slate-200 dark:divide-zinc-800">
                       {data.details.pending.length === 0 ? (
-                        <tr><td colSpan={7} className="px-4 py-4 text-center text-sm text-slate-500 dark:text-zinc-400">{t('table.empty.pending')}</td></tr>
+                        <tr><td colSpan={10} className="px-4 py-4 text-center text-sm text-slate-500 dark:text-zinc-400">{t('table.empty.pending')}</td></tr>
                       ) : data.details.pending.map((item) => (
                         <tr key={item.id} className="hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors">
                           <td className="px-4 py-3 text-sm text-slate-800 dark:text-zinc-200 font-medium">{item.doNumber}</td>
@@ -461,6 +490,38 @@ export default function AnalyticsClient() {
                           <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300">{new Date(item.createdAt).toLocaleDateString(language === 'id' ? 'id-ID' : 'en-US')}</td>
                           <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 text-right">{item.totalPcs}</td>
                           <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 text-right">{item.totalLiter.toFixed(1)}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 font-medium">{item.vehicleNo || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300">{item.driverName || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300">{item.helperName || "-"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Employee Delivery Performance Table */}
+              <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl border border-slate-100 dark:border-zinc-700 shadow-sm print-break transition-colors duration-300">
+                <h2 className="text-lg font-bold text-slate-800 dark:text-zinc-100 mb-4">{t('table.employee_deliveries')}</h2>
+                <div className="overflow-x-auto">
+                  <table className="print-table min-w-full divide-y divide-slate-200 dark:divide-zinc-700">
+                    <thead className="bg-slate-50 dark:bg-zinc-800">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.employee_name')}</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.driver_destinations')}</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.helper_destinations')}</th>
+                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-zinc-300 uppercase tracking-wider">{t('table.col.total_destinations')}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white dark:bg-zinc-900 divide-y divide-slate-200 dark:divide-zinc-800">
+                      {!data.details.employeeDeliveries || data.details.employeeDeliveries.length === 0 ? (
+                        <tr><td colSpan={4} className="px-4 py-4 text-center text-sm text-slate-500 dark:text-zinc-400">{t('table.empty.employee_deliveries')}</td></tr>
+                      ) : data.details.employeeDeliveries.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-zinc-800 transition-colors">
+                          <td className="px-4 py-3 text-sm text-slate-800 dark:text-zinc-200 font-medium">{item.employeeName}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 text-right">{item.driverDestinationsCount}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 dark:text-zinc-300 text-right">{item.helperDestinationsCount}</td>
+                          <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-zinc-100 text-right">{item.totalDestinationsCount}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -487,13 +548,13 @@ export default function AnalyticsClient() {
           {/* Quick actions */}
           <div className="flex items-center gap-2 my-2">
             <button
-              onClick={() => setExportSections({ inbound: true, outboundProducts: true, stock: true, delivered: true, pending: true })}
+              onClick={() => setExportSections({ inbound: true, outboundProducts: true, stock: true, delivered: true, pending: true, employeeDeliveries: true })}
               className="text-xs font-semibold px-2.5 py-1.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
             >
               {t('analytics.select_all')}
             </button>
             <button
-              onClick={() => setExportSections({ inbound: false, outboundProducts: false, stock: false, delivered: false, pending: false })}
+              onClick={() => setExportSections({ inbound: false, outboundProducts: false, stock: false, delivered: false, pending: false, employeeDeliveries: false })}
               className="text-xs font-semibold px-2.5 py-1.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-300 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors cursor-pointer"
             >
               {t('analytics.clear_all')}
@@ -508,6 +569,7 @@ export default function AnalyticsClient() {
               { key: "stock" as const, label: t('analytics.sections.stock') },
               { key: "delivered" as const, label: t('analytics.sections.delivered') },
               { key: "pending" as const, label: t('analytics.sections.pending') },
+              { key: "employeeDeliveries" as const, label: t('analytics.sections.employee_deliveries') },
             ].map((section) => (
               <label
                 key={section.key}

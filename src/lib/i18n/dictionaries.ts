@@ -39,6 +39,7 @@ export const dictionaries = {
     "analytics.sections.stock": "Warehouse Stock Report",
     "analytics.sections.delivered": "Delivered Orders Report",
     "analytics.sections.pending": "Pending Orders Report",
+    "analytics.sections.employee_deliveries": "Employee Delivery Performance",
     
     // KPIs
     "kpi.inbound": "Inbound",
@@ -57,6 +58,7 @@ export const dictionaries = {
     "table.stock_summary": "Total Warehouse Stock Report (Snapshot)",
     "table.delivered_orders": "Delivered Orders Report",
     "table.pending_orders": "Pending Orders Report",
+    "table.employee_deliveries": "Employee Delivery Performance Report (Driver vs Helper)",
     
     "table.col.product_code": "Product Code",
     "table.col.product_name": "Product Name",
@@ -71,12 +73,46 @@ export const dictionaries = {
     "table.col.date": "Date",
     "table.col.status": "Status",
     "table.col.created": "Created",
+    "table.col.vehicle_no": "Vehicle No.",
+    "table.col.driver": "Driver",
+    "table.col.helper": "Helper",
+    "table.col.employee_name": "Employee Name",
+    "table.col.driver_destinations": "Destinations (Driver)",
+    "table.col.helper_destinations": "Destinations (Helper)",
+    "table.col.total_destinations": "Total Destinations",
     
     "table.empty.inbound": "No inbound records found.",
     "table.empty.outbound_prod": "No outbound product records found.",
     "table.empty.stock": "No stock found in the warehouse.",
     "table.empty.delivered": "No delivered orders found.",
-    "table.empty.pending": "No pending orders found."
+    "table.empty.pending": "No pending orders found.",
+    "table.empty.employee_deliveries": "No employee delivery records found.",
+
+    // Deliveries
+    "deliveries.title": "Deliveries Monitoring",
+    "deliveries.subtitle": "Drivers can mark deliveries, assign fleet info, and undo if mistaken.",
+    "deliveries.search_placeholder": "Search DO, customer, driver, vehicle...",
+    "deliveries.ready_to_deliver": "Ready to Deliver",
+    "deliveries.delivered": "Delivered",
+    "deliveries.unassigned": "Unassigned",
+    "deliveries.assign_fleet": "Assign Fleet",
+    "deliveries.detail": "Detail",
+    "deliveries.deliver": "Deliver",
+    "deliveries.undo": "Undo",
+    "deliveries.modal.title": "Assign Fleet & Driver",
+    "deliveries.modal.driver_label": "Driver",
+    "deliveries.modal.vehicle_label": "Vehicle No. / License Plate",
+    "deliveries.modal.helper_label": "Helper",
+    "deliveries.modal.driver_placeholder": "-- Unassigned --",
+    "deliveries.modal.vehicle_placeholder": "e.g. B 1234 ABC",
+    "deliveries.modal.helper_placeholder": "e.g. John / Dave",
+    "deliveries.modal.cancel": "Cancel",
+    "deliveries.modal.save": "Save Fleet",
+    "deliveries.warning.title": "Delivery Information Warning",
+    "deliveries.warning.desc": "Vehicle Number or Driver is missing on DO",
+    "deliveries.warning.assign_now": "Assign Fleet Now",
+    "deliveries.warning.proceed": "Proceed Delivery",
+    "deliveries.warning.cancel": "Cancel"
   },
   id: {
     // Layout / Navigation
@@ -116,6 +152,7 @@ export const dictionaries = {
     "analytics.sections.stock": "Laporan Stok Gudang",
     "analytics.sections.delivered": "Laporan Pesanan Terkirim",
     "analytics.sections.pending": "Laporan Pesanan Tertunda",
+    "analytics.sections.employee_deliveries": "Kinerja Pengiriman Karyawan",
     
     // KPIs
     "kpi.inbound": "Inbound",
@@ -134,6 +171,7 @@ export const dictionaries = {
     "table.stock_summary": "Laporan Total Stok Gudang (Cuplikan Saat Ini)",
     "table.delivered_orders": "Laporan Pesanan Terkirim",
     "table.pending_orders": "Laporan Pesanan Tertunda",
+    "table.employee_deliveries": "Laporan Kinerja Pengiriman Karyawan (Driver & Helper)",
     
     "table.col.product_code": "Kode Produk",
     "table.col.product_name": "Nama Produk",
@@ -148,12 +186,46 @@ export const dictionaries = {
     "table.col.date": "Tanggal",
     "table.col.status": "Status",
     "table.col.created": "Dibuat",
+    "table.col.vehicle_no": "No. Kendaraan",
+    "table.col.driver": "Driver",
+    "table.col.helper": "Helper",
+    "table.col.employee_name": "Nama Karyawan",
+    "table.col.driver_destinations": "Jumlah Tujuan (Driver)",
+    "table.col.helper_destinations": "Jumlah Tujuan (Helper)",
+    "table.col.total_destinations": "Total Tujuan",
     
     "table.empty.inbound": "Tidak ada catatan inbound yang ditemukan.",
     "table.empty.outbound_prod": "Tidak ada catatan produk outbound yang ditemukan.",
     "table.empty.stock": "Tidak ada stok yang ditemukan di gudang.",
     "table.empty.delivered": "Tidak ada pesanan terkirim yang ditemukan.",
-    "table.empty.pending": "Tidak ada pesanan tertunda yang ditemukan."
+    "table.empty.pending": "Tidak ada pesanan tertunda yang ditemukan.",
+    "table.empty.employee_deliveries": "Tidak ada catatan pengiriman karyawan yang ditemukan.",
+
+    // Deliveries
+    "deliveries.title": "Pemantauan Pengiriman",
+    "deliveries.subtitle": "Driver dapat menandai pengiriman, mengatur armada, dan menggunakan Undo jika salah.",
+    "deliveries.search_placeholder": "Cari DO, pelanggan, driver, kendaraan...",
+    "deliveries.ready_to_deliver": "Siap Dikirim",
+    "deliveries.delivered": "Terkirim",
+    "deliveries.unassigned": "Belum Ditugaskan",
+    "deliveries.assign_fleet": "Atur Armada",
+    "deliveries.detail": "Detail",
+    "deliveries.deliver": "Deliver",
+    "deliveries.undo": "Undo",
+    "deliveries.modal.title": "Atur Armada & Supir",
+    "deliveries.modal.driver_label": "Supir / Driver",
+    "deliveries.modal.vehicle_label": "No. Kendaraan / Plat Nomor",
+    "deliveries.modal.helper_label": "Helper / Kernet",
+    "deliveries.modal.driver_placeholder": "-- Belum Ditugaskan --",
+    "deliveries.modal.vehicle_placeholder": "Contoh: B 1234 ABC",
+    "deliveries.modal.helper_placeholder": "Contoh: Budi / Supri",
+    "deliveries.modal.cancel": "Batal",
+    "deliveries.modal.save": "Simpan Armada",
+    "deliveries.warning.title": "Peringatan Informasi Pengiriman",
+    "deliveries.warning.desc": "Nomor Kendaraan atau Driver belum diisi pada DO",
+    "deliveries.warning.assign_now": "Atur Armada Sekarang",
+    "deliveries.warning.proceed": "Tetap Kirim",
+    "deliveries.warning.cancel": "Batal"
   }
 };
 

@@ -11,25 +11,32 @@ export default async function DeliveriesPage() {
   const userId = (session?.user as any)?.id ?? "";
   const userRole = (session?.user as any)?.role ?? "";
 
-  const orders = await prisma.deliveryOrder.findMany({
-    where: {
-      status: { in: ["delivered", "on_delivery"] },
-    },
-    include: {
-      customer: true,
-      driver: true,
-      picker: true,
-      deliveryTicket: {
-        select: {
-          dtNumber: true,
-          deliverToName: true,
-          deliverToAddress: true,
-        },
+  const [orders, drivers] = await Promise.all([
+    prisma.deliveryOrder.findMany({
+      where: {
+        status: { in: ["delivered", "on_delivery"] },
       },
-      pickingItems: { select: { id: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      include: {
+        customer: true,
+        driver: true,
+        picker: true,
+        deliveryTicket: {
+          select: {
+            dtNumber: true,
+            deliverToName: true,
+            deliverToAddress: true,
+          },
+        },
+        pickingItems: { select: { id: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.user.findMany({
+      where: { isActive: true },
+      select: { id: true, fullName: true, role: true },
+      orderBy: { fullName: "asc" },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -40,7 +47,7 @@ export default async function DeliveriesPage() {
             Deliveries Monitoring
           </h1>
           <p className="text-slate-500 dark:text-zinc-400 mt-1">
-            Driver dapat menandai pengiriman dan menggunakan Undo jika salah.
+            Driver dapat menandai pengiriman, mengatur armada, dan menggunakan Undo jika salah.
           </p>
         </div>
       </div>
@@ -48,6 +55,7 @@ export default async function DeliveriesPage() {
       <div className="bg-white rounded-2xl shadow-sm border p-6">
         <DeliveriesClient
           initialOrders={JSON.parse(JSON.stringify(orders))}
+          drivers={JSON.parse(JSON.stringify(drivers))}
           currentUserId={userId}
           currentUserRole={userRole}
         />

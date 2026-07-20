@@ -99,6 +99,7 @@ export async function GET(request: Request) {
       },
       include: { 
         customer: true, 
+        driver: true,
         deliveryTicket: {
           include: { items: { include: { product: true } } }
         }
@@ -125,6 +126,7 @@ export async function GET(request: Request) {
       },
       include: { 
         customer: true, 
+        driver: true,
         deliveryTicket: {
           include: { items: { include: { product: true } } }
         }
@@ -319,7 +321,10 @@ export async function GET(request: Request) {
       destination: doItem.deliveryTicket?.deliverToAddress || doItem.destination,
       deliveryDate: doItem.deliveryDate || doItem.createdAt,
       totalPcs: doItem.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + it.deliveredQty, 0) || 0,
-      totalLiter: calcOutboundLiter(doItem)
+      totalLiter: calcOutboundLiter(doItem),
+      vehicleNo: doItem.vehicleNo || "-",
+      driverName: doItem.driver?.fullName || "-",
+      helperName: (doItem as any).helperName || "-"
     })).sort((a, b) => new Date(b.deliveryDate).getTime() - new Date(a.deliveryDate).getTime());
 
     // Pending Deliveries Details
@@ -331,7 +336,10 @@ export async function GET(request: Request) {
       status: doItem.status,
       createdAt: doItem.createdAt,
       totalPcs: doItem.deliveryTicket?.items?.reduce((acc: number, it: any) => acc + it.deliveredQty, 0) || 0,
-      totalLiter: calcOutboundLiter(doItem)
+      totalLiter: calcOutboundLiter(doItem),
+      vehicleNo: doItem.vehicleNo || "-",
+      driverName: doItem.driver?.fullName || "-",
+      helperName: (doItem as any).helperName || "-"
     })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
     // Detailed Stock Report
@@ -358,6 +366,47 @@ export async function GET(request: Request) {
     });
     const stockDetails = Array.from(stockMap.values()).map(item => ({ ...item, liter: roundFloat(item.liter, 2) })).sort((a, b) => b.liter - a.liter);
 
+    // Employee Delivery Performance (Driver vs Helper)
+    const employeeDeliveryMap = new Map<string, { employeeName: string; driverDestinationsCount: number; helperDestinationsCount: number; totalDestinationsCount: number }>();
+
+    const getOrCreateEmployee = (name: string) => {
+      const trimmed = name.trim();
+      if (!employeeDeliveryMap.has(trimmed)) {
+        employeeDeliveryMap.set(trimmed, {
+          employeeName: trimmed,
+          driverDestinationsCount: 0,
+          helperDestinationsCount: 0,
+          totalDestinationsCount: 0
+        });
+      }
+      return employeeDeliveryMap.get(trimmed)!;
+    };
+
+    deliveredDOs.forEach(doItem => {
+      // Driver count
+      const driverName = doItem.driver?.fullName;
+      if (driverName && driverName.trim() && driverName !== "-") {
+        const emp = getOrCreateEmployee(driverName);
+        emp.driverDestinationsCount += 1;
+        emp.totalDestinationsCount += 1;
+      }
+
+      // Helper count (can be multiple separated by comma, slash, or &)
+      const rawHelper = (doItem as any).helperName;
+      if (rawHelper && typeof rawHelper === "string" && rawHelper.trim() && rawHelper !== "-") {
+        const helpers = rawHelper.split(/[,/&]+/).map(h => h.trim()).filter(Boolean);
+        helpers.forEach(helperName => {
+          if (helperName) {
+            const emp = getOrCreateEmployee(helperName);
+            emp.helperDestinationsCount += 1;
+            emp.totalDestinationsCount += 1;
+          }
+        });
+      }
+    });
+
+    const employeeDeliveries = Array.from(employeeDeliveryMap.values()).sort((a, b) => b.totalDestinationsCount - a.totalDestinationsCount);
+
     return NextResponse.json({
       success: true,
       summary: {
@@ -374,7 +423,8 @@ export async function GET(request: Request) {
         outboundProducts: outboundProductDetails,
         outbound: outboundDetails,
         pending: pendingDetails,
-        stock: stockDetails
+        stock: stockDetails,
+        employeeDeliveries
       }
     });
   } catch (error: any) {
