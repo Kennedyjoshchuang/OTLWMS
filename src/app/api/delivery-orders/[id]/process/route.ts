@@ -33,6 +33,8 @@ export async function POST(
 
       // 2. Process each picking item
       for (const item of doRecord.pickingItems) {
+        if (item.status === "shipped") continue;
+
         // Fetch current stock ledger
         const stock = await tx.stockLedger.findUnique({
           where: { id: item.stockLedgerId },

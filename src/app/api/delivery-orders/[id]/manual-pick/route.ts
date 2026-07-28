@@ -103,6 +103,54 @@ export async function POST(
         include: { product: true, pickedBy: true },
       });
 
+      // Consume pre-allocated pending DOPickingItems for this DO & DTItem
+      const pendingItems = await tx.dOPickingItem.findMany({
+        where: { deliveryOrderId: id, dtItemId, status: "pending" },
+        orderBy: { requiredQty: "desc" },
+      });
+
+      let remainingToCancelPending = quantity;
+      for (const pItem of pendingItems) {
+        if (remainingToCancelPending <= 0) break;
+
+        if (pItem.requiredQty <= remainingToCancelPending) {
+          remainingToCancelPending -= pItem.requiredQty;
+
+          if (pItem.stockLedgerId !== stock.id) {
+            const otherStock = await tx.stockLedger.findUnique({ where: { id: pItem.stockLedgerId } });
+            if (otherStock) {
+              const otherRes = Math.max(0, (otherStock.reservedQty ?? 0) - pItem.requiredQty);
+              await tx.stockLedger.update({
+                where: { id: otherStock.id },
+                data: { reservedQty: otherRes, isReserved: otherRes > 0 },
+              });
+            }
+          }
+
+          await tx.dOPickingItem.delete({ where: { id: pItem.id } });
+        } else {
+          const newReq = pItem.requiredQty - remainingToCancelPending;
+
+          if (pItem.stockLedgerId !== stock.id) {
+            const otherStock = await tx.stockLedger.findUnique({ where: { id: pItem.stockLedgerId } });
+            if (otherStock) {
+              const otherRes = Math.max(0, (otherStock.reservedQty ?? 0) - remainingToCancelPending);
+              await tx.stockLedger.update({
+                where: { id: otherStock.id },
+                data: { reservedQty: otherRes, isReserved: otherRes > 0 },
+              });
+            }
+          }
+
+          await tx.dOPickingItem.update({
+            where: { id: pItem.id },
+            data: { requiredQty: newReq },
+          });
+
+          remainingToCancelPending = 0;
+        }
+      }
+
       // 6. Create StockMovement
       await tx.stockMovement.create({
         data: {
@@ -140,6 +188,22 @@ export async function POST(
       const allFulfilled = allDTItems.every((i) => (i.deliveredQty ?? 0) >= i.delQtyPcs);
 
       if (allFulfilled) {
+        // Clear any lingering pending picking items for this DO
+        const leftoverPending = await tx.dOPickingItem.findMany({
+          where: { deliveryOrderId: id, status: "pending" },
+        });
+        for (const lp of leftoverPending) {
+          const lpStock = await tx.stockLedger.findUnique({ where: { id: lp.stockLedgerId } });
+          if (lpStock) {
+            const res = Math.max(0, (lpStock.reservedQty ?? 0) - lp.requiredQty);
+            await tx.stockLedger.update({
+              where: { id: lpStock.id },
+              data: { reservedQty: res, isReserved: res > 0 },
+            });
+          }
+          await tx.dOPickingItem.delete({ where: { id: lp.id } });
+        }
+
         await tx.deliveryOrder.update({
           where: { id },
           data: { status: "delivered", pickingCompletedAt: new Date(), deliveredAt: new Date() },
