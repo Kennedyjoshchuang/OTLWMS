@@ -5,6 +5,7 @@ import { PDFParse } from "pdf-parse";
 import path from "path";
 import { pathToFileURL } from "url";
 import fs from "fs";
+import { createWorker } from "tesseract.js";
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,11 +43,50 @@ export async function POST(req: NextRequest) {
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
+    const fileName = (file.name || "").toLowerCase();
+    const isImage = file.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(fileName);
 
-    // Parse PDF text using PDFParse class
-    const parser = new PDFParse({ data: buffer });
-    const parsedPdf = await parser.getText();
-    const text: string = parsedPdf.text || "";
+    let text: string = "";
+
+    const getOcrWorker = async () => {
+      const workerPath = path.join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js");
+      return await createWorker("eng", 1, {
+        workerPath: fs.existsSync(workerPath) ? workerPath : undefined,
+      });
+    };
+
+    if (isImage) {
+      // Use Tesseract OCR for image files
+      try {
+        const worker = await getOcrWorker();
+        const ret = await worker.recognize(buffer);
+        text = ret.data.text || "";
+        await worker.terminate();
+      } catch (ocrErr) {
+        console.error("Tesseract OCR error for image:", ocrErr);
+      }
+    } else {
+      // Parse PDF text using PDFParse class
+      try {
+        const parser = new PDFParse({ data: buffer });
+        const parsedPdf = await parser.getText();
+        text = parsedPdf.text || "";
+      } catch (pdfErr) {
+        console.error("PDFParse error:", pdfErr);
+      }
+
+      // If PDF text extraction yielded insufficient text (scanned image PDF), fallback to Tesseract OCR
+      if (!text || text.trim().length < 20) {
+        try {
+          const worker = await getOcrWorker();
+          const ret = await worker.recognize(buffer);
+          text = ret.data.text || "";
+          await worker.terminate();
+        } catch (ocrErr) {
+          console.error("Tesseract OCR fallback error for PDF:", ocrErr);
+        }
+      }
+    }
 
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     
@@ -65,108 +105,101 @@ export async function POST(req: NextRequest) {
     let deliveryDate = "";
     let createdDate = "";
     
+    let deliverToIndex = -1;
+    let addressLineStart = -1;
+
     // Extract fields line-by-line using regular expressions
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
       // DT / Pick List Number
-      // Pattern 1: Standalone 8-digit number (Jotun DTs are typically 8 digits, e.g. 41608513)
       if (/^\d{8}$/.test(line) && !dtNumber) {
         dtNumber = line;
       }
-      // Pattern 2: Standard Pick List: 12345
-      const dtMatch = line.match(/(?:Pick\s*List|Picking\s*List)(?:\s*No\.?)?\s*[:\.-]\s*([A-Z0-9-]+)/i) ||
-                      line.match(/(?:Pick\s*List|Picking\s*List)(?:\s*No\.?)?\s+([A-Z0-9-]+)/i);
+      const dtMatch = line.match(/(?:Pick\s*List|Picking\s*List)(?:\s*No\.?)?\s*[:\.-]?\s*([A-Z0-9-]+)/i);
       if (dtMatch && !dtNumber) {
         const val = dtMatch[1].trim();
-        if (!/printed/i.test(val)) {
+        if (!/printed|created|order|customer/i.test(val)) {
           dtNumber = val;
         }
       }
 
-      // Order Number and Created Date (sometimes merged: "Order Number: W14494382 7/14/26 12:19:40 PM")
-      const orderMatch = line.match(/Order(?:\s*Number|\s*No\.?)?\s*[:\.-]\s*([A-Z0-9-]+)(?:\s+([\d/: ]+(?:AM|PM)?))?/i) ||
-                         line.match(/Order(?:\s*Number|\s*No\.?)?\s+([A-Z0-9-]+)/i);
+      // Order Number
+      const orderMatch = line.match(/Order(?:\s*Number|\s*No\.?)?\s*[:\.-]?\s*([A-Z0-9-]+)/i);
       if (orderMatch && !orderNumber) {
         orderNumber = orderMatch[1].trim();
-        if (orderMatch[2] && !createdDate) {
-          createdDate = orderMatch[2].trim();
+      }
+
+      // Customer / PO Number (e.g. Customer: 292313)
+      const poMatch = line.match(/(?:Customer\s*PO|Cust\.?\s*PO|PO)(?:\s*Number|\s*No\.?)?\s*[:\.-]?\s*([A-Z0-9-]+)/i) ||
+                      line.match(/Customer\s*[:\.-]\s*([A-Z0-9-]+)/i);
+      if (poMatch && !customerPoNo) {
+        const val = poMatch[1].trim();
+        if (!/delivery|order|pick|route/i.test(val)) {
+          customerPoNo = val;
         }
       }
 
-      // Customer / PO Number
-      const poMatch = line.match(/(?:Customer\s*PO|Cust\.?\s*PO|PO)(?:\s*Number|\s*No\.?)?\s*[:\.-]\s*([A-Z0-9-]+)/i) ||
-                      line.match(/(?:Customer\s*PO|Cust\.?\s*PO|PO)(?:\s*Number|\s*No\.?)?\s+([A-Z0-9-]+)/i) ||
-                      line.match(/^Customer\s*[:\.-]\s*([A-Z0-9-]+)$/i);
-      if (poMatch && !customerPoNo) {
-        customerPoNo = poMatch[1].trim();
-      }
-
-      // Delivery Date (sometimes merged: "3/29/24Delivery Date:")
-      const delDateMatch = line.match(/([\d/-]+)\s*Delivery\s*Date/i) ||
-                           line.match(/Delivery\s*Date\s*[:\.-]\s*([\d/-]+)/i);
+      // Delivery Date (e.g. Delivery Date: 7/3/26 or 3/29/24Delivery Date:)
+      const delDateMatch = line.match(/Delivery\s*Date\s*[:\.-]?\s*([\d/-]+)/i) ||
+                           line.match(/([\d/-]+)\s*Delivery\s*Date/i);
       if (delDateMatch && !deliveryDate) {
         deliveryDate = delDateMatch[1].trim();
       }
-    }
 
-    // Find Deliver To / Delivery Address
-    let deliverToIndex = -1;
-    for (let i = 0; i < lines.length; i++) {
-      if (/^(?:Deliver\s*To|Delivery\s*Addr(?:ess)?|Ship\s*To)/i.test(lines[i])) {
+      // Deliver To Name & Delivery Address (e.g., Customer: 292313 Delivery Address: MITRA 10 GATOT SUBROTO BALI)
+      const delAddrMatch = line.match(/(?:Deliver\s*To|Delivery\s*Addr(?:ess)?|Ship\s*To)\s*[:\.-]?\s*(.*)$/i);
+      if (delAddrMatch && deliverToIndex === -1) {
         deliverToIndex = i;
-        break;
+        const inlineName = delAddrMatch[1].trim();
+        if (inlineName) {
+          deliverToName = inlineName;
+          addressLineStart = i + 1;
+        } else {
+          deliverToName = (lines[i + 1] || "").trim();
+          addressLineStart = i + 2;
+        }
       }
     }
 
-    if (deliverToIndex !== -1) {
-      const line = lines[deliverToIndex];
-      const colonIdx = line.indexOf(':');
-      if (colonIdx !== -1 && line.substring(colonIdx + 1).trim()) {
-        deliverToName = line.substring(colonIdx + 1).trim();
-        let addrLines = [];
-        for (let j = deliverToIndex + 1; j < lines.length; j++) {
-          const nextLine = lines[j];
-          if (/Order|Pick|Customer|Route|Date|Part|Qty|Loc|Page|Total|Created|Printed/i.test(nextLine)) {
-            break;
-          }
-          addrLines.push(nextLine);
+    // Extract address lines following deliverToName
+    if (addressLineStart !== -1 && addressLineStart < lines.length) {
+      const addrLines: string[] = [];
+      for (let j = addressLineStart; j < lines.length; j++) {
+        const line = lines[j];
+        if (/^(?:Order|Pick|Customer|Route|Date|Location|Part|Qty|Loc|Page|Total|Created|Printed|Consolidated)/i.test(line)) {
+          break;
         }
-        deliverToAddress = addrLines.join(", ");
-      } else {
-        deliverToName = lines[deliverToIndex + 1] || "";
-        let addrLines = [];
-        for (let j = deliverToIndex + 2; j < lines.length; j++) {
-          const nextLine = lines[j];
-          if (/Order|Pick|Customer|Route|Date|Part|Qty|Loc|Page|Total|Created|Printed/i.test(nextLine)) {
-            break;
-          }
-          addrLines.push(nextLine);
-        }
-        deliverToAddress = addrLines.join(", ");
+        addrLines.push(line);
       }
+      deliverToAddress = addrLines.join(", ");
     }
 
-    // Clean up deliverToName if it matches "Delivery Address" or "Delivery Address:"
+    // Clean deliverToName if it is prefixed with "Delivery Address"
     if (/^Delivery\s*Address/i.test(deliverToName)) {
-      const addrParts = deliverToAddress.split(", ").map(p => p.trim()).filter(Boolean);
-      if (addrParts.length > 0) {
-        deliverToName = addrParts[0];
-        deliverToAddress = addrParts.slice(1).join(", ");
+      const parts = deliverToAddress.split(", ").map(p => p.trim()).filter(Boolean);
+      if (parts.length > 0) {
+        deliverToName = parts[0];
+        deliverToAddress = parts.slice(1).join(", ");
       }
     }
 
     // Parse items
     const rawItems = [];
-    let stopScanningItems = false;
+    let scanningItems = false;
 
     for (const line of lines) {
-      if (/Total\s*Quantity/i.test(line) || /Total\s*Gross\s*Weight/i.test(line)) {
-        stopScanningItems = true;
+      if (/Location\s*No|Part\s*Number|Description|Lot\/Batch/i.test(line)) {
+        scanningItems = true;
         continue;
       }
 
-      if (stopScanningItems) {
+      if (/Total\s*Quantity/i.test(line) || /Total\s*Gross\s*Weight/i.test(line)) {
+        scanningItems = false;
         continue;
       }
+
+      if (!scanningItems) continue;
 
       let productCode = "";
       
@@ -180,32 +213,33 @@ export async function POST(req: NextRequest) {
         }
       }
       
-      // Step 2: Fall back to 9-char code pattern
+      // Step 2: Fall back to 7-12 character alphanumeric code pattern
       if (!productCode) {
-        const prodCodeMatch = line.match(/\b[A-Z0-9]{9}\b/);
-        if (prodCodeMatch) {
-          productCode = prodCodeMatch[0];
+        for (const t of tokens) {
+          const clean = t.replace(/[^A-Z0-9]/ig, "");
+          if (/^[A-Z0-9]{7,12}$/i.test(clean)) {
+            // Exclude location codes like AL0101 and table label keywords
+            if (!/^[A-Z]{2}\d{4}[P]?$/i.test(clean) && !/^(LOCATION|PART|NUMBER|DESCRIPTION|QUANTITY|CATCH|TOTAL)/i.test(clean)) {
+              productCode = clean;
+              break;
+            }
+          }
         }
       }
       
       if (!productCode) continue;
 
-      // Filter out common labels
-      if (/^(ORDER|CUSTOMER|PICKLIST|DELIVER|DELIVERY|ROUTE|CREATED|DATE|DESCRIPTION|BATCH|QUANTITY|TOTAL|SOURCE)/i.test(productCode)) {
-        continue;
-      }
-
       const parts = line.split(productCode);
+      if (parts.length < 2) continue;
       const after = parts[1].trim();
 
-      const numbers = after.match(/\d+/g);
-      if (!numbers) continue;
-      
-      const afterTokens = after.split(/\s+/);
-      const lastToken = afterTokens.pop() || ""; // quantity
+      const afterTokens = after.split(/\s+/).filter(Boolean);
+      if (afterTokens.length === 0) continue;
+
+      const lastToken = afterTokens.pop() || "";
       const delQtyPcs = parseInt(lastToken, 10) || 0;
 
-      // Pop off any tailing "*" or empty tokens (like Pallet Id column)
+      // Pop off any trailing "*" or empty tokens (Pallet Id column)
       while (afterTokens.length > 0 && (afterTokens[afterTokens.length - 1] === "*" || afterTokens[afterTokens.length - 1] === "")) {
         afterTokens.pop();
       }
@@ -217,7 +251,7 @@ export async function POST(req: NextRequest) {
         const hasDigitsOrSymbols = /[\d-*:]{4,}/.test(potentialBatch);
         
         if (hasDigitsOrSymbols && !isPaintSize) {
-          afterTokens.pop(); // Remove the batch token so it does not get joined into productName
+          lotBatchNo = afterTokens.pop() || "";
         }
       }
 
@@ -226,7 +260,7 @@ export async function POST(req: NextRequest) {
       rawItems.push({
         productCode,
         productName,
-        lotBatchNo: "", // Explicitly set to empty/removed
+        lotBatchNo,
         delQtyPcs
       });
     }
@@ -234,7 +268,6 @@ export async function POST(req: NextRequest) {
     // Enrich items with database product info
     const enrichedItems = await Promise.all(
       rawItems.map(async (item) => {
-        // Query product details from database
         let dbProduct = await prisma.product.findFirst({
           where: { productCode: item.productCode, isActive: true }
         });
@@ -245,7 +278,6 @@ export async function POST(req: NextRequest) {
 
         if (!dbProduct) {
           existsInDb = false;
-          // Find closest product code from the database using Levenshtein distance
           const allProducts = await prisma.product.findMany({
             where: { isActive: true },
             select: { productCode: true, productName: true, sizeLiter: true }
@@ -260,7 +292,6 @@ export async function POST(req: NextRequest) {
             const dbName = p.productName || "";
             const nameDist = getLevenshteinDistance(parsedName.toUpperCase(), dbName.toUpperCase());
             
-            // Composite score: prioritizing code matching (weight 1000) while description breaks ties
             const score = codeDist * 1000 + nameDist;
             
             if (score < bestScore) {
@@ -269,7 +300,7 @@ export async function POST(req: NextRequest) {
             }
           }
           
-          if (bestMatch) {
+          if (bestMatch && bestScore < 3000) {
             dbProduct = bestMatch;
             matchedProductCode = bestMatch.productCode;
           }
@@ -282,7 +313,6 @@ export async function POST(req: NextRequest) {
         if (sizeLiter) {
           calculatedLiter = roundFloat(item.delQtyPcs * sizeLiter, 2);
         } else {
-          // Fallback to parse size from name
           const sizeMatch = name.match(/(\d+(?:\.\d+)?)\s*L(?:iter)?\b/i);
           if (sizeMatch) {
             const parsedSize = parseFloat(sizeMatch[1]);
@@ -308,10 +338,11 @@ export async function POST(req: NextRequest) {
       customerPoNo,
       deliverToName,
       deliverToAddress,
+      deliveryDate,
       items: enrichedItems
     });
   } catch (error: any) {
-    console.error("PDF Parsing error:", error);
+    console.error("PDF/Image Parsing error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

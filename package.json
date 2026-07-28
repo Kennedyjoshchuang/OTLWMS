@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
+    "@napi-rs/canvas": "^1.0.3",
     "@prisma/client": "^5.22.0",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -46,6 +47,7 @@
     "recharts": "^3.8.1",
     "ssh2": "^1.17.0",
     "tailwind-merge": "^3.6.0",
+    "tesseract.js": "^7.0.0",
     "uuid": "^14.0.0",
     "xlsx": "^0.18.5",
     "zod": "^4.4.3",
