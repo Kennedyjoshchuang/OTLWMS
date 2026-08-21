@@ -63,6 +63,22 @@ export async function POST(
       });
 
       // 4. Allocate picking items from StockLedger
+      // Pre-resolve any missing productIds on DT items before allocation
+      for (const item of ticket.items) {
+        if (!item.productId && item.productCode) {
+          const matchedProduct = await tx.product.findFirst({
+            where: { customerId: ticket.customerId, productCode: item.productCode },
+          });
+          if (matchedProduct) {
+            item.productId = matchedProduct.id;
+            await tx.deliveryTicketItem.update({
+              where: { id: item.id },
+              data: { productId: matchedProduct.id },
+            });
+          }
+        }
+      }
+
       const productIds = ticket.items
         .map((item) => item.productId)
         .filter((id): id is string => !!id);

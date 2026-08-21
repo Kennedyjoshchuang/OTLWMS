@@ -49,6 +49,20 @@ export async function POST(
       const dtItem = await tx.deliveryTicketItem.findUnique({ where: { id: dtItemId } });
       if (!dtItem) throw new Error("Delivery Ticket item not found.");
 
+      // Resolve productId from dtItem or the selected stock ledger
+      const resolvedProductId = dtItem.productId || stock.productId;
+      if (!resolvedProductId) {
+        throw new Error("Product could not be resolved for this item.");
+      }
+
+      // If dtItem lacked productId, link it now so it stays consistent
+      if (!dtItem.productId && resolvedProductId) {
+        await tx.deliveryTicketItem.update({
+          where: { id: dtItemId },
+          data: { productId: resolvedProductId },
+        });
+      }
+
       // Validate that picking quantity does not exceed the remaining needed quantity
       const alreadyPickedAgg = await tx.dOPickingItem.aggregate({
         where: { deliveryOrderId: id, dtItemId, status: "shipped" },
@@ -89,7 +103,7 @@ export async function POST(
         data: {
           deliveryOrderId: id,
           dtItemId,
-          productId: dtItem.productId!,
+          productId: resolvedProductId,
           stockLedgerId: stock.id,
           palletPositionId: stock.palletPositionId,
           positionCode: stock.palletPosition.positionCode,
@@ -154,7 +168,7 @@ export async function POST(
       // 6. Create StockMovement
       await tx.stockMovement.create({
         data: {
-          productId: dtItem.productId!,
+          productId: resolvedProductId,
           palletPositionId: stock.palletPositionId,
           movementType: "outbound",
           quantity,
