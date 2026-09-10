@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { generateDO } from "@/lib/utils";
 
 export async function POST(
@@ -12,6 +13,11 @@ export async function POST(
     // Run in a transaction
     const deliveryOrder = await prisma.$transaction(
       async (tx) => {
+      // Lock DeliveryTicket row to serialize concurrent create-do requests on the same ticket
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM "DeliveryTicket" WHERE id = ${id} FOR UPDATE`
+      );
+
       // 1. Fetch DT
       const ticket = await tx.deliveryTicket.findUnique({
         where: { id },
@@ -26,9 +32,12 @@ export async function POST(
         return ticket.deliveryOrders[0];
       }
 
-      // 2. Generate DO Number
+      // 2. Generate DO Number (with row lock on prefix to prevent sequence collision)
       const year = new Date().getFullYear();
       const prefix = `OTL-PL-${year}-`;
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM "DeliveryOrder" WHERE "doNumber" LIKE ${prefix + '%'} ORDER BY "doNumber" DESC LIMIT 1 FOR UPDATE`
+      );
       const latestDO = await tx.deliveryOrder.findFirst({
         where: {
           doNumber: {
@@ -83,12 +92,23 @@ export async function POST(
         .map((item) => item.productId)
         .filter((id): id is string => !!id);
 
+      if (productIds.length > 0) {
+        // Exclusively lock candidate StockLedger rows to prevent concurrent DO creations from double-allocating stock
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "StockLedger" WHERE "productId" IN (${Prisma.join(productIds)}) AND "quantity" > 0 FOR UPDATE`
+        );
+      }
+
       const allStockEntries = await tx.stockLedger.findMany({
         where: {
           productId: { in: productIds },
           quantity: { gt: 0 },
         },
-        orderBy: { inboundDate: "asc" },
+        orderBy: [
+          { inboundDate: "asc" },
+          { createdAt: "asc" },
+          { id: "asc" },
+        ],
         include: { palletPosition: true },
       });
 

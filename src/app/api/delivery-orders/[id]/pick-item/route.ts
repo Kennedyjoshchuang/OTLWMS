@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
@@ -21,6 +22,11 @@ export async function POST(
     }
 
     const updatedDO = await prisma.$transaction(async (tx) => {
+      // Lock picking item to prevent concurrent double-pick on rapid clicks
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM "DOPickingItem" WHERE id = ${pickingItemId} FOR UPDATE`
+      );
+
       // 1. Fetch the DO and the picking item
       const doRecord = await tx.deliveryOrder.findUnique({
         where: { id },
@@ -36,7 +42,10 @@ export async function POST(
         throw new Error("Item has already been picked.");
       }
 
-      // 2. Fetch the stock ledger
+      // 2. Fetch and lock the stock ledger
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM "StockLedger" WHERE id = ${item.stockLedgerId} FOR UPDATE`
+      );
       const stock = await tx.stockLedger.findUnique({
         where: { id: item.stockLedgerId },
       });
@@ -45,7 +54,13 @@ export async function POST(
 
       // 3. Deduct stock
       const qtyPicked = item.requiredQty;
-      const newQty = Math.max(0, stock.quantity - qtyPicked);
+      if (stock.quantity < qtyPicked) {
+        throw new Error(
+          `Insufficient physical stock at position ${item.positionCode}. Available: ${stock.quantity}, Required: ${qtyPicked}. Please reallocate before picking.`
+        );
+      }
+
+      const newQty = stock.quantity - qtyPicked;
       const newReservedQty = Math.max(0, stock.reservedQty - qtyPicked);
 
       await tx.stockLedger.update({

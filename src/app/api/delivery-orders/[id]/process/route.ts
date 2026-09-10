@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { roundFloat } from "@/lib/utils";
@@ -17,6 +18,11 @@ export async function POST(
 
     // Run in a transaction
     const deliveryOrder = await prisma.$transaction(async (tx) => {
+      // Lock DO row to prevent concurrent double-processing
+      await tx.$queryRaw(
+        Prisma.sql`SELECT id FROM "DeliveryOrder" WHERE id = ${id} FOR UPDATE`
+      );
+
       // 1. Fetch DO
       const doRecord = await tx.deliveryOrder.findUnique({
         where: { id },
@@ -31,6 +37,20 @@ export async function POST(
         throw new Error("Delivery Order is already processed.");
       }
 
+      // Lock all affected stock ledgers
+      const stockIds = Array.from(
+        new Set(
+          doRecord.pickingItems
+            .filter((p) => p.status !== "shipped")
+            .map((p) => p.stockLedgerId)
+        )
+      );
+      if (stockIds.length > 0) {
+        await tx.$queryRaw(
+          Prisma.sql`SELECT id FROM "StockLedger" WHERE id IN (${Prisma.join(stockIds)}) FOR UPDATE`
+        );
+      }
+
       // 2. Process each picking item
       for (const item of doRecord.pickingItems) {
         if (item.status === "shipped") continue;
@@ -41,11 +61,18 @@ export async function POST(
           include: { product: true }
         });
 
-        if (!stock) continue;
+        if (!stock) {
+          throw new Error(`Stock record not found for position ${item.positionCode}.`);
+        }
 
-        // Deduct quantity and reset reservedQty
         const qtyPicked = item.requiredQty;
-        const newQty = Math.max(0, stock.quantity - qtyPicked);
+        if (stock.quantity < qtyPicked) {
+          throw new Error(
+            `Insufficient physical stock at position ${item.positionCode} for product ${stock.product?.productCode || item.productId}. Available: ${stock.quantity}, Required: ${qtyPicked}. Please reallocate before completing.`
+          );
+        }
+
+        const newQty = stock.quantity - qtyPicked;
         const newReservedQty = Math.max(0, stock.reservedQty - qtyPicked);
         const sizeLiter = stock.product?.sizeLiter || 0;
         const newQtyLiter = roundFloat(newQty * sizeLiter, 2);
