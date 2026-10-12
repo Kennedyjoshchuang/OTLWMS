@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Search, Plus, X, Loader2, CheckCircle2, AlertCircle,
   Pencil, Trash2, Box, ChevronDown, PackageSearch, ToggleLeft, ToggleRight,
-  AlertTriangle, Clock, MessageSquare,
+  AlertTriangle, Clock, MessageSquare, ArrowRightLeft, GitMerge,
 } from "lucide-react";
 import Select from "react-select";
 import { useSession } from "next-auth/react";
@@ -98,6 +98,13 @@ export default function ProductsClient({
   const [deleteError, setDeleteError] = useState("");
   const [deleteSuccess, setDeleteSuccess] = useState(false);
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+
+  // Aggregate modal state
+  const [aggregateSource, setAggregateSource] = useState<Product | null>(null);
+  const [aggregateTargetId, setAggregateTargetId] = useState("");
+  const [aggregating, setAggregating] = useState(false);
+  const [aggregateError, setAggregateError] = useState("");
+  const [aggregateSuccess, setAggregateSuccess] = useState(false);
 
   // Fetch pending delete requests on mount
   useEffect(() => {
@@ -257,6 +264,63 @@ export default function ProductsClient({
       setDeleteError(err.message);
     } finally {
       setDeleteSubmitting(false);
+    }
+  };
+
+  // ── Open aggregate modal
+  const openAggregate = (p: Product) => {
+    setAggregateSource(p);
+    setAggregateTargetId("");
+    setAggregateError("");
+    setAggregateSuccess(false);
+  };
+
+  const closeAggregate = () => {
+    if (aggregating) return;
+    setAggregateSource(null);
+    setAggregateTargetId("");
+    setAggregateError("");
+    setAggregateSuccess(false);
+  };
+
+  // ── Submit product aggregation
+  const handleAggregateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aggregateSource || !aggregateTargetId) {
+      setAggregateError("Pilih produk target untuk agregasi.");
+      return;
+    }
+    setAggregating(true);
+    setAggregateError("");
+
+    try {
+      const res = await fetch("/api/products/aggregate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceProductId: aggregateSource.id,
+          targetProductId: aggregateTargetId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal melakukan agregasi produk.");
+      }
+
+      setAggregateSuccess(true);
+      // Remove or inactivate the aggregated product from local state
+      setProducts((prev) => prev.filter((p) => p.id !== aggregateSource.id));
+
+      setTimeout(() => {
+        closeAggregate();
+        closeModal();
+        startTransition(() => router.refresh());
+      }, 1200);
+    } catch (err: any) {
+      setAggregateError(err.message);
+    } finally {
+      setAggregating(false);
     }
   };
 
@@ -643,30 +707,201 @@ export default function ProductsClient({
                 </div>
 
                 {/* Footer */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      disabled={saving}
+                      className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className={`flex-1 py-2.5 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70 ${
+                        showReactivateWarning 
+                          ? "bg-amber-600 hover:bg-amber-700 shadow-sm shadow-amber-600/20" 
+                          : "bg-primary hover:bg-primary-focus shadow-sm shadow-primary/20"
+                      }`}
+                    >
+                      {saving ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan…</>
+                      ) : showReactivateWarning ? (
+                        <><CheckCircle2 className="w-4 h-4" /> Restore & Update</>
+                      ) : (
+                        <><CheckCircle2 className="w-4 h-4" /> {modalMode === "add" ? "Simpan Produk" : "Update Produk"}</>
+                      )}
+                    </button>
+                  </div>
+
+                  {modalMode === "edit" && editTarget && (
+                    <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
+                      <div className="text-[11px] text-slate-500">
+                        Ingin menggabungkan seluruh lini produk ini ke produk lain?
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openAggregate(editTarget)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-xl transition-all shadow-sm"
+                      >
+                        <GitMerge className="w-3.5 h-3.5" />
+                        Agregasikan Produk
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Aggregate Product Modal ─────────────────────────────────────────── */}
+      {aggregateSource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            onClick={closeAggregate}
+          />
+          <div className="relative z-10 w-full max-w-lg mx-4 bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+            {/* Header */}
+            <div className="p-6 border-b flex items-center justify-between bg-gradient-to-r from-purple-50 to-indigo-50/50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-sm">
+                  <GitMerge className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">
+                    Agregasikan Lini Produk
+                  </h2>
+                  <p className="text-xs text-slate-500 font-mono">
+                    {aggregateSource.productCode} — {aggregateSource.customer.code}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeAggregate}
+                disabled={aggregating}
+                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-white rounded-xl transition-colors disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Success */}
+            {aggregateSuccess ? (
+              <div className="p-10 flex flex-col items-center gap-4 text-center">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-800">Agregasi Berhasil!</h3>
+                <p className="text-slate-500 text-sm">
+                  Seluruh stok dan dokumen produk telah digabungkan ke produk tujuan.
+                </p>
+              </div>
+            ) : (
+              <form onSubmit={handleAggregateSubmit} className="p-6 space-y-4">
+                {aggregateError && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {aggregateError}
+                  </div>
+                )}
+
+                {/* Source Product Info */}
+                <div className="p-4 rounded-2xl bg-purple-50/60 border border-purple-100 space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700">
+                    Produk Sumber (Akan Dinonaktifkan)
+                  </span>
+                  <div className="text-sm font-bold text-slate-800">
+                    {aggregateSource.productName}
+                  </div>
+                  <div className="text-xs font-mono text-slate-500 flex items-center gap-2">
+                    <span>Kode: {aggregateSource.productCode}</span>
+                    <span>•</span>
+                    <span>Customer: {aggregateSource.customer.name}</span>
+                  </div>
+                </div>
+
+                {/* Destination Product Dropdown */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5 uppercase tracking-wide">
+                    Gabungkan Ke Produk Tujuan (Target) *
+                  </label>
+                  <Select
+                    options={products
+                      .filter((p) => p.customerId === aggregateSource.customerId && p.id !== aggregateSource.id)
+                      .map((p) => ({
+                        value: p.id,
+                        label: `${p.productCode} — ${p.productName} (${p.sizeLiter ?? 0} L)`,
+                      }))}
+                    value={
+                      aggregateTargetId
+                        ? (() => {
+                            const found = products.find((p) => p.id === aggregateTargetId);
+                            return found
+                              ? {
+                                  value: found.id,
+                                  label: `${found.productCode} — ${found.productName} (${found.sizeLiter ?? 0} L)`,
+                                }
+                              : null;
+                          })()
+                        : null
+                    }
+                    onChange={(val) => setAggregateTargetId(val?.value || "")}
+                    placeholder="— Cari dan pilih produk target —"
+                    isSearchable={true}
+                    className="text-sm"
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        borderRadius: "0.75rem",
+                        minHeight: "44px",
+                        borderColor: "#e2e8f0",
+                        backgroundColor: "#f8fafc",
+                      }),
+                    }}
+                  />
+                  <p className="text-[11px] text-slate-500 mt-1.5">
+                    Hanya menampilkan produk aktif yang memiliki customer yang sama ({aggregateSource.customer.name}).
+                  </p>
+                </div>
+
+                {/* Warning note */}
+                <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold">Konsekuensi Agregasi Produk:</p>
+                    <ul className="list-disc list-inside space-y-0.5 text-slate-700 text-[11px]">
+                      <li>Semua catatan stok fisik di gudang akan dialihkan ke produk target.</li>
+                      <li>Kapasitas liter pada stok akan dihitung ulang mengikuti ukuran produk target.</li>
+                      <li>Dokumen Surat Jalan / Delivery Ticket dan Packing List akan diperbarui.</li>
+                      <li>Produk sumber ({aggregateSource.productCode}) akan dinonaktifkan.</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Buttons */}
                 <div className="flex gap-3 pt-2">
                   <button
                     type="button"
-                    onClick={closeModal}
-                    disabled={saving}
+                    onClick={closeAggregate}
+                    disabled={aggregating}
                     className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
                   >
                     Batal
                   </button>
                   <button
                     type="submit"
-                    disabled={saving}
-                    className={`flex-1 py-2.5 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 disabled:opacity-70 ${
-                      showReactivateWarning 
-                        ? "bg-amber-600 hover:bg-amber-700 shadow-sm shadow-amber-600/20" 
-                        : "bg-primary hover:bg-primary-focus shadow-sm shadow-primary/20"
-                    }`}
+                    disabled={aggregating || !aggregateTargetId}
+                    className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-semibold transition-all flex items-center justify-center gap-2 shadow-sm shadow-purple-600/20 disabled:opacity-50"
                   >
-                    {saving ? (
-                      <><Loader2 className="w-4 h-4 animate-spin" /> Menyimpan…</>
-                    ) : showReactivateWarning ? (
-                      <><CheckCircle2 className="w-4 h-4" /> Restore & Update</>
+                    {aggregating ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Menggabungkan…</>
                     ) : (
-                      <><CheckCircle2 className="w-4 h-4" /> {modalMode === "add" ? "Simpan Produk" : "Update Produk"}</>
+                      <><GitMerge className="w-4 h-4" /> Konfirmasi Agregasi</>
                     )}
                   </button>
                 </div>

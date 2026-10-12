@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw, Move, ArrowRightLeft, Trash2, Clock } from "lucide-react";
+import { Package, Search, Layers, MapPin, Activity, Info, AlertTriangle, CheckCircle2, Pencil, Save, Undo, Loader2, RefreshCw, Move, ArrowRightLeft, Trash2, Clock, GitMerge } from "lucide-react";
+import Select from "react-select";
 import { getDisplayRowNumber, hasWriteAccess } from "@/lib/utils";
 import { useSession } from "next-auth/react";
 
@@ -85,6 +86,20 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
   const [deleteError, setDeleteError] = useState("");
   const [pendingDeleteLedgerIds, setPendingDeleteLedgerIds] = useState<Set<string>>(new Set());
   const [pendingDeleteReceiptIds, setPendingDeleteReceiptIds] = useState<Set<string>>(new Set());
+
+  // Convert Block / Turn into Another Product state
+  const [convertingBlock, setConvertingBlock] = useState<{
+    position: any;
+    sourceProduct: any;
+    totalQty: number;
+    totalLiter: number;
+    ledgersCount: number;
+  } | null>(null);
+  const [customerProducts, setCustomerProducts] = useState<any[]>([]);
+  const [customerProductsLoading, setCustomerProductsLoading] = useState(false);
+  const [selectedConvertTargetProductId, setSelectedConvertTargetProductId] = useState("");
+  const [isConverting, setIsConverting] = useState(false);
+  const [convertError, setConvertError] = useState("");
 
   // Flat list of all positions (excluding the currently selected position) for target selection
   const allPositions = useMemo(() => {
@@ -295,6 +310,73 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
     setSelectedTargetPositionId("");
     setMoveError("");
     setMergeDifferingBatches(false);
+  };
+
+  const handleStartConvertBlock = async (
+    pos: any,
+    product: any,
+    totalQty: number,
+    totalLiter: number,
+    ledgersCount: number
+  ) => {
+    setConvertingBlock({
+      position: pos,
+      sourceProduct: product,
+      totalQty,
+      totalLiter,
+      ledgersCount,
+    });
+    setSelectedConvertTargetProductId("");
+    setConvertError("");
+    setCustomerProductsLoading(true);
+
+    try {
+      const res = await fetch(`/api/products?customerId=${product.customerId}`);
+      if (res.ok) {
+        const prods = await res.json();
+        setCustomerProducts(prods);
+      } else {
+        setCustomerProducts([]);
+      }
+    } catch (e) {
+      console.error("Error fetching customer products for conversion:", e);
+      setCustomerProducts([]);
+    } finally {
+      setCustomerProductsLoading(false);
+    }
+  };
+
+  const handleConfirmConvertBlock = async () => {
+    if (!convertingBlock || !selectedConvertTargetProductId) return;
+    setIsConverting(true);
+    setConvertError("");
+
+    try {
+      const res = await fetch("/api/warehouse/convert-block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          palletPositionId: convertingBlock.position.id,
+          sourceProductId: convertingBlock.sourceProduct.id,
+          targetProductId: selectedConvertTargetProductId,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to convert stock block.");
+      }
+
+      // Refresh layout
+      await fetchLayout(false);
+      setConvertingBlock(null);
+      setSelectedCell(null);
+    } catch (err: any) {
+      console.error("Error converting stock block:", err);
+      setConvertError(err.message || "Failed to convert stock block.");
+    } finally {
+      setIsConverting(false);
+    }
   };
 
   const fetchMovements = useCallback(async () => {
@@ -1643,56 +1725,75 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                                       </div>
 
                                       {canWrite && (
-                                        <div className="flex gap-2 w-full">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              if (isCollection) {
-                                                handleStartCollectionMove(
-                                                  primarySl.productId,
-                                                  primarySl.product.productName,
-                                                  primarySl.product.productCode,
-                                                  totalQty,
-                                                  pos,
-                                                  groupLedgers.length
-                                                );
-                                              } else {
-                                                handleStartMove(primarySl, pos);
-                                              }
-                                            }}
-                                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
-                                              isCollection
-                                                ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200'
-                                                : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-100'
-                                            }`}
-                                          >
-                                            <Move className="w-3.5 h-3.5" />
-                                            {isCollection ? 'Move Entire Collection' : 'Move Item'}
-                                          </button>
-                                          {!isCollection && (
-                                            ((primarySl.inboundReceiptId && pendingDeleteReceiptIds.has(primarySl.inboundReceiptId)) || pendingDeleteLedgerIds.has(primarySl.id)) ? (
-                                              <button
-                                                disabled
-                                                type="button"
-                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-yellow-200 text-yellow-600 bg-yellow-50"
-                                              >
-                                                <Clock className="w-3.5 h-3.5" />
-                                                Pending Del
-                                              </button>
-                                            ) : (
+                                          <div className="flex flex-col gap-2 w-full">
+                                            <div className="flex gap-2 w-full">
                                               <button
                                                 type="button"
-                                                onClick={() => handleStartDeleteRequest(primarySl, pos)}
-                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-all"
+                                                onClick={() => {
+                                                  if (isCollection) {
+                                                    handleStartCollectionMove(
+                                                      primarySl.productId,
+                                                      primarySl.product.productName,
+                                                      primarySl.product.productCode,
+                                                      totalQty,
+                                                      pos,
+                                                      groupLedgers.length
+                                                    );
+                                                  } else {
+                                                    handleStartMove(primarySl, pos);
+                                                  }
+                                                }}
+                                                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
+                                                  isCollection
+                                                    ? 'text-amber-700 bg-amber-50 hover:bg-amber-100 border-amber-200'
+                                                    : 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-100'
+                                                }`}
                                               >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                                Delete Item
+                                                <Move className="w-3.5 h-3.5" />
+                                                {isCollection ? 'Move Collection' : 'Move Item'}
                                               </button>
-                                            )
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  handleStartConvertBlock(
+                                                    pos,
+                                                    primarySl.product,
+                                                    totalQty,
+                                                    totalLiter,
+                                                    groupLedgers.length
+                                                  );
+                                                }}
+                                                title="Turn this block of product into another product"
+                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200 transition-all shadow-sm"
+                                              >
+                                                <GitMerge className="w-3.5 h-3.5" />
+                                                Convert Product
+                                              </button>
+                                            </div>
+                                            {!isCollection && (
+                                              ((primarySl.inboundReceiptId && pendingDeleteReceiptIds.has(primarySl.inboundReceiptId)) || pendingDeleteLedgerIds.has(primarySl.id)) ? (
+                                                <button
+                                                  disabled
+                                                  type="button"
+                                                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-yellow-200 text-yellow-600 bg-yellow-50"
+                                                >
+                                                  <Clock className="w-3.5 h-3.5" />
+                                                  Pending Deletion
+                                                </button>
+                                              ) : (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleStartDeleteRequest(primarySl, pos)}
+                                                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 transition-all"
+                                                >
+                                                  <Trash2 className="w-3.5 h-3.5" />
+                                                  Delete Item
+                                                </button>
+                                              )
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
                                   );
                                 })}
                               </div>
@@ -2115,6 +2216,175 @@ export default function WarehouseMapClient({ initialRacks }: WarehouseMapClientP
                     <>
                       <ArrowRightLeft className="w-3.5 h-3.5" />
                       Confirm Move
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── CONVERT BLOCK / TURN PRODUCT DIALOG ───────────────────────────── */}
+      <Dialog open={!!convertingBlock} onOpenChange={(open) => {
+        if (!open && !isConverting) setConvertingBlock(null);
+      }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto rounded-3xl p-6 bg-white shadow-2xl border border-slate-100">
+          <DialogHeader className="border-b pb-4 mb-4">
+            <DialogTitle className="flex items-center gap-2.5 text-xl text-slate-800 font-bold">
+              <GitMerge className="w-5 h-5 text-purple-600" />
+              Convert Stock Product
+            </DialogTitle>
+          </DialogHeader>
+
+          {convertingBlock && (
+            <div className="space-y-4">
+              {convertError && (
+                <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-xs">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {convertError}
+                </div>
+              )}
+
+              {/* Current Block Info */}
+              <div className="bg-purple-50/60 border border-purple-100 rounded-2xl p-4 space-y-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">
+                      Current Stored Product
+                    </h4>
+                    <p className="text-sm font-bold text-slate-800 leading-tight">
+                      {convertingBlock.sourceProduct.productName}
+                    </p>
+                    <p className="text-xs font-mono text-slate-500">
+                      {convertingBlock.sourceProduct.productCode}
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded">
+                    {convertingBlock.position.positionCode}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-purple-100/60 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Total Quantity:</span>
+                    <span className="font-extrabold text-slate-800">{convertingBlock.totalQty} pcs</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block">Current Volume:</span>
+                    <span className="font-extrabold text-slate-800">{convertingBlock.totalLiter.toFixed(1)} L</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Select Target Product */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
+                  Turn into Product (Same Customer) *
+                </label>
+                {customerProductsLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 py-3">
+                    <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                    Memuat daftar produk customer…
+                  </div>
+                ) : (
+                  <Select
+                    options={customerProducts
+                      .filter((p) => p.id !== convertingBlock.sourceProduct.id)
+                      .map((p) => ({
+                        value: p.id,
+                        label: `${p.productCode} — ${p.productName} (${p.sizeLiter ?? 0} L)`,
+                        sizeLiter: p.sizeLiter ?? 0,
+                      }))}
+                    value={
+                      selectedConvertTargetProductId
+                        ? (() => {
+                            const found = customerProducts.find((p) => p.id === selectedConvertTargetProductId);
+                            return found
+                              ? {
+                                  value: found.id,
+                                  label: `${found.productCode} — ${found.productName} (${found.sizeLiter ?? 0} L)`,
+                                }
+                              : null;
+                          })()
+                        : null
+                    }
+                    onChange={(val: any) => setSelectedConvertTargetProductId(val?.value || "")}
+                    placeholder="— Cari dan pilih produk target —"
+                    isSearchable={true}
+                    className="text-sm"
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        borderRadius: "0.75rem",
+                        minHeight: "44px",
+                        borderColor: "#e2e8f0",
+                        backgroundColor: "#f8fafc",
+                      }),
+                    }}
+                  />
+                )}
+              </div>
+
+              {/* Calculation Preview if Target Selected */}
+              {selectedConvertTargetProductId && (() => {
+                const target = customerProducts.find((p) => p.id === selectedConvertTargetProductId);
+                if (!target) return null;
+                const newLiter = (convertingBlock.totalQty * (target.sizeLiter || 0)).toFixed(1);
+                return (
+                  <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      Preview Perubahan Stok
+                    </span>
+                    <div className="flex justify-between items-center text-slate-700">
+                      <span>Produk Baru:</span>
+                      <span className="font-semibold">{target.productCode}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-700">
+                      <span>Ukuran Liter Baru:</span>
+                      <span className="font-semibold">{target.sizeLiter ?? 0} L/pcs</span>
+                    </div>
+                    <div className="flex justify-between items-center text-slate-900 font-bold border-t pt-1">
+                      <span>Total Volume Baru:</span>
+                      <span className="text-purple-700 font-extrabold">{newLiter} L</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex gap-2">
+                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  Operasi ini hanya mengubah stok di lokasi <b>{convertingBlock.position.positionCode}</b>. Produk sumber di posisi rak lain tidak terpengaruh dan tetap aktif.
+                </span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setConvertingBlock(null)}
+                  disabled={isConverting}
+                  className="flex-1 py-2.5 border rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50 text-xs flex items-center justify-center gap-1.5"
+                >
+                  <Undo className="w-3.5 h-3.5" />
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmConvertBlock}
+                  disabled={isConverting || !selectedConvertTargetProductId}
+                  className="flex-1 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-semibold shadow-sm shadow-purple-600/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isConverting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Mengonversi…
+                    </>
+                  ) : (
+                    <>
+                      <GitMerge className="w-3.5 h-3.5" />
+                      Konfirmasi Ubah Produk
                     </>
                   )}
                 </button>
